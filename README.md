@@ -1,2 +1,2 @@
 # pico_dazzler
-Dazzler graphics Altair Duino / Altair Simulator using Raspberry Pi Pico
+Dazzler graphics for the Altair Duino / Altair Simulator using Raspberry Pi Pico
