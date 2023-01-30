@@ -282,9 +282,22 @@ void process_usb_commands()
             {
                 if ((c & 0x0F) == 0)
                 {
+                    uint8_t prev_dazzler_ctrl = dazzler_ctrl;
                     dazzler_ctrl = (uint8_t) getchar();
+                    if (dazzler_ctrl != prev_dazzler_ctrl)
+                    {
+                        /* If Dazzler is turned on */
+                        if (dazzler_ctrl & 0x80)
+                        {
+                            refresh_vram();
+                        }
+                        else /* Dazzler turned off */
+                        {
+                            /* blank screen */
+                            memset(frame_buffer, 0, sizeof(frame_buffer));
+                        }
+                    }
                 }
-                
                 break;
             }
             case DAZ_CTRLPIC:
@@ -342,9 +355,8 @@ void process_usb_commands()
     }
 }
 
-/* TODO: These probably need to be reversed! I think MSB if pixel 0 and LSB is pixel 7 */
-uint8_t bit_masks[8] = { 0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01 };
-//uint8_t bit_masks[8] = { 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80 };
+/* TODO: No longer used due to loop unrolling */
+// uint8_t bit_masks[8] = { 0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01 };
 
 void set_vram(int addr, uint8_t value, bool refresh)
 {
@@ -370,7 +382,7 @@ void set_vram(int addr, uint8_t value, bool refresh)
 //            printf("Mode = 128x128m");
             /* In this mode each byte contains 8 individual on/off pixels*/
             /* this also needs to do the different addressing for each quater of the screen */
-            if (addr < 512) /* First quadrant */
+            if (addr < 512)             /* First quadrant */
             {
                 y = addr / 16 * 2;
                 x = (addr * 4) % 64;
@@ -390,8 +402,8 @@ void set_vram(int addr, uint8_t value, bool refresh)
                 y = (addr - 1536) / 16 * 2 + 64;
                 x = (((addr - 1536) * 4) % 64) + 64;
             }
-            /* If bit is set, set pixel to foreground colour, otherwise set to black */
 
+            /* If bit is set, set pixel to foreground colour, otherwise set to black */
             set_pixel_128(x, y, (value & 0x01) ? mono_clr : 0);
             set_pixel_128(x + 1, y, (value & 0x02) ? mono_clr : 0);
             set_pixel_128(x, y + 1, (value & 0x04) ? mono_clr : 0);
