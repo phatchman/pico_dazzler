@@ -1,3 +1,8 @@
+/* USB Host includes */
+
+#include "bsp/board.h"
+#include "tusb.h"
+
 #include "pico.h"
 #include "pico/stdlib.h"
 #include "pico/scanvideo.h"
@@ -6,13 +11,11 @@
 #include "hardware/clocks.h"
 
 /* TODOS:
- * Should check colour / b&w regardless of the mode
- * Need to implement second colour table for b&w mode.
- * Move the graphic mode and B&W calculation to DAZ_CTRLPIC
  */
 
 #include <string.h>
 #include <stdio.h>
+
 /* 
  * Dazzler resolutions are:
  * 128x128 (mono), 64x64 (2k mode) and 32x32 (512 byte mode)
@@ -261,7 +264,8 @@ void process_usb_commands()
 #endif
     while (true)
     {
-        int c = getchar();
+	tuh_task();
+       int c = getchar();
 
         absolute_time_t abs_time = get_absolute_time();
         led_status = (to_ms_since_boot(abs_time) / 50) % 2;
@@ -479,46 +483,75 @@ void refresh_vram()
 int main(void)
 {
     /* 1024x768 mode requires a system clock of 130MHz */
+ 
     set_sys_clock_khz(130000, true);
+
+    board_init();
+    tuh_init(BOARD_TUH_RHPORT);
+
     stdio_init_all();
 
     memset(frame_buffer, 0, sizeof(frame_buffer));
 
     int clr = 0;
- #if 0
-    for (int x = 0 ; x < WIDTH ; x++)
-    {
-        for (int y = 0 ; y < HEIGHT ; y++)
-        {
-            set_pixel_128(x,y,clr++ % 16);
-        }
-    }
-    for (int x = 0 ; x < 32 ; x++)
-    {
-        for (int y = 0 ; y < 32 ; y++)
-        {
-            set_pixel_32(x,y,clr++%16);
-        }
-    }
-#else
     sleep_ms(1000);
     
-//    dazzler_picture_ctrl = 0b00110000;
-//    dazzler_picture_ctrl = 0b01011100;
-//    refresh_vram();
-//    set_vram(2040, 0xFF);
-
-#if 0
-    for (int i = 0 ; i < 2048 ; i++)
-    {
-        set_vram(i, 0xCC, false);
-    }
-#endif
-#endif
     multicore_launch_core1(core1_main);
 #ifdef DEBUG
     printf("processing serial commands\n");
 #endif
     process_usb_commands();
 //    while(true){}
+}
+
+void tuh_cdc_rx_cb(uint8_t idx)
+{
+  uint8_t buf[64+1]; // +1 for extra null character
+  uint32_t const bufsize = sizeof(buf)-1;
+
+  // forward cdc interfaces -> console
+  uint32_t count = tuh_cdc_read(idx, buf, bufsize);
+  buf[count] = 0;
+
+  printf((char*) buf);
+}
+
+void tuh_cdc_mount_cb(uint8_t idx)
+{
+  tuh_cdc_itf_info_t itf_info = { 0 };
+  tuh_cdc_itf_get_info(idx, &itf_info);
+
+  printf("CDC Interface is mounted: address = %u, itf_num = %u\r\n", itf_info.daddr, itf_info.bInterfaceNumber);
+
+#ifdef CFG_TUH_CDC_LINE_CODING_ON_ENUM
+  // CFG_TUH_CDC_LINE_CODING_ON_ENUM must be defined for line coding is set by tinyusb in enumeration
+  // otherwise you need to call tuh_cdc_set_line_coding() first
+  cdc_line_coding_t line_coding = { 0 };
+  if ( tuh_cdc_get_local_line_coding(idx, &line_coding) )
+  {
+    printf("  Baudrate: %lu, Stop Bits : %u\r\n", line_coding.bit_rate, line_coding.stop_bits);
+    printf("  Parity  : %u, Data Width: %u\r\n", line_coding.parity  , line_coding.data_bits);
+  }
+#endif
+}
+
+void tuh_cdc_umount_cb(uint8_t idx)
+{
+  tuh_cdc_itf_info_t itf_info = { 0 };
+  tuh_cdc_itf_get_info(idx, &itf_info);
+
+  printf("CDC Interface is unmounted: address = %u, itf_num = %u\r\n", itf_info.daddr, itf_info.bInterfaceNumber);
+}
+
+
+void tuh_mount_cb(uint8_t dev_addr)
+{
+  // application set-up
+  printf("A device with address %d is mounted\r\n", dev_addr);
+}
+
+void tuh_umount_cb(uint8_t dev_addr)
+{
+  // application tear-down
+  printf("A device with address %d is unmounted \r\n", dev_addr);
 }
