@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.13)
-set(PICO_BOARD vgaboard)
+set(PICO_BOARD pico)
 set(BOARD pico_sdk)
 set(FAMILY rp2040)
 include(tinyusb/hw/bsp/family_support.cmake)

@@ -25,7 +25,7 @@
 #define HEIGHT  128
 #define NUMCLR  16
 
-//#define DEBUG
+#define DEBUG
 
 /* Dazzler packet types */
 #define DAZ_MEMBYTE   0x10
@@ -486,22 +486,36 @@ int main(void)
  
     set_sys_clock_khz(130000, true);
 
+    stdio_init_all();
     board_init();
     tuh_init(BOARD_TUH_RHPORT);
 
-    stdio_init_all();
+    const uint LED_PIN = PICO_DEFAULT_LED_PIN;
+    gpio_init(LED_PIN);
+    gpio_set_dir(LED_PIN, GPIO_OUT);
+    int led_status = 1;
 
+    gpio_put(LED_PIN, led_status);
+#if 0
+while(1)
+{
+        gpio_put(LED_PIN, led_status);
+	led_status = ! led_status;
+	printf("Hello\r\n");
+	sleep_ms(1000);
+}
+#endif
     memset(frame_buffer, 0, sizeof(frame_buffer));
 
     int clr = 0;
     sleep_ms(1000);
     
-    multicore_launch_core1(core1_main);
+//    multicore_launch_core1(core1_main);
 #ifdef DEBUG
     printf("processing serial commands\n");
 #endif
-    process_usb_commands();
-//    while(true){}
+//    process_usb_commands();
+//    while(true){ tuh_task(); }
 }
 
 void tuh_cdc_rx_cb(uint8_t idx)
