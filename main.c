@@ -143,6 +143,45 @@ uint16_t frame_buffer[WIDTH * HEIGHT];
  */
 uint8_t raw_frame[2048];
 
+#define USB_BUFFER_SIZE 4096
+uint8_t usb_buffer[USB_BUFFER_SIZE];
+uint8_t *usb_wr = usb_buffer;
+uint8_t *usb_rd = usb_buffer;
+
+/* Return # bytes avail. TODO: This can probably just be bool */
+bool usb_avail()
+{
+    return usb_rd != usb_wr;
+}
+
+uint8_t usb_getbyte()
+{
+    uint8_t result = 0;
+    if (usb_avail())
+    {
+        result = *(++usb_rd);
+    }
+    if (usb_rd >= (usb_buffer + USB_BUFFER_SIZE))
+    {
+        usb_rd = usb_buffer;
+    }
+    return result;
+}
+
+/* set a byte into usb buffer 
+ * note write byte before incrementing pointer to make multi-thread safe
+ * Well it probably really needs more than that. TODO: to check */
+uint8_t usb_setbyte(uint8_t byte)
+{
+    uint8_t* wr_pos = usb_wr + 1;
+    if (wr_pos >= usb_buffer + USB_BUFFER_SIZE)
+    {
+        wr_pos = usb_buffer;
+    }
+    *wr_pos = byte;
+    usb_wr = wr_pos;
+}
+
 /*
  * The current video mode, set by DAZ_CTRLPIC
  */
@@ -262,11 +301,17 @@ void process_usb_commands()
  
     }
 #endif
+    uint8_t c = 0;
     while (true)
     {
-	tuh_task();
-       int c = getchar();
-
+        if (!usb_avail())
+        {
+       	    tuh_task();
+            continue;
+        }
+        c = usb_getbyte();
+        putchar(c);
+   
         absolute_time_t abs_time = get_absolute_time();
         led_status = (to_ms_since_boot(abs_time) / 50) % 2;
         gpio_put(LED_PIN, led_status);
@@ -518,16 +563,18 @@ while(1)
 //    while(true){ tuh_task(); }
 }
 
+
+
 void tuh_cdc_rx_cb(uint8_t idx)
 {
-  uint8_t buf[64+1]; // +1 for extra null character
-  uint32_t const bufsize = sizeof(buf)-1;
+    uint8_t buf[64]; // +1 for extra null character
 
-  // forward cdc interfaces -> console
-  uint32_t count = tuh_cdc_read(idx, buf, bufsize);
-  buf[count] = 0;
-
-  printf((char*) buf);
+    // forward cdc interfaces -> console
+    uint32_t count = tuh_cdc_read(idx, buf, sizeof(buf));
+    for (int i = 0 ; i < count ; i++)
+    {
+        usb_setbyte(buf[i]);
+    }
 }
 
 void tuh_cdc_mount_cb(uint8_t idx)
