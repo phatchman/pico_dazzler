@@ -160,10 +160,10 @@ uint8_t usb_getbyte()
     if (usb_avail())
     {
         result = *(++usb_rd);
-    }
-    if (usb_rd >= (usb_buffer + USB_BUFFER_SIZE))
-    {
-        usb_rd = usb_buffer;
+    	if (usb_rd >= (usb_buffer + USB_BUFFER_SIZE))
+    	{
+            usb_rd = usb_buffer;
+    	}
     }
     return result;
 }
@@ -171,10 +171,10 @@ uint8_t usb_getbyte()
 /* set a byte into usb buffer 
  * note write byte before incrementing pointer to make multi-thread safe
  * Well it probably really needs more than that. TODO: to check */
-uint8_t usb_setbyte(uint8_t byte)
+void usb_setbyte(uint8_t byte)
 {
     uint8_t* wr_pos = usb_wr + 1;
-    if (wr_pos >= usb_buffer + USB_BUFFER_SIZE)
+    if (wr_pos >= (usb_buffer + USB_BUFFER_SIZE))
     {
         wr_pos = usb_buffer;
     }
@@ -310,7 +310,8 @@ void process_usb_commands()
             continue;
         }
         c = usb_getbyte();
-        putchar(c);
+//        putchar(c);
+//	continue;
    
         absolute_time_t abs_time = get_absolute_time();
         led_status = (to_ms_since_boot(abs_time) / 50) % 2;
@@ -559,7 +560,7 @@ while(1)
 #ifdef DEBUG
     printf("processing serial commands\n");
 #endif
-//    process_usb_commands();
+    process_usb_commands();
 //    while(true){ tuh_task(); }
 }
 
