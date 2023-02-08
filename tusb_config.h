@@ -47,13 +47,14 @@
 
 // RHPort max operational speed can defined by board.mk
 #ifndef BOARD_TUH_MAX_SPEED
-#define BOARD_TUH_MAX_SPEED   OPT_MODE_DEFAULT_SPEED
+//#define BOARD_TUH_MAX_SPEED   OPT_MODE_DEFAULT_SPEED
+#define BOARD_TUH_MAX_SPEED   OPT_MODE_HIGH_SPEED
 #endif
 
 //--------------------------------------------------------------------
 // COMMON CONFIGURATION
 //--------------------------------------------------------------------
-
+#define CFG_TUH_API_EDPT_XFER 1
 // defined by compiler flags for flexibility
 #ifndef CFG_TUSB_MCU
 #error CFG_TUSB_MCU must be defined
@@ -97,8 +98,7 @@
 
 #define CFG_TUH_HUB                 1 // number of supported hubs
 #define CFG_TUH_CDC                 1
-#define CFG_TUH_HID                 0 // typical keyboard + mouse device can have 3-4 HID interfaces
-//#define CFG_TUH_HID                 4 // typical keyboard + mouse device can have 3-4 HID interfaces
+#define CFG_TUH_HID                 4 // 2 x joystick, kb, mouse
 #define CFG_TUH_MSC                 0
 #define CFG_TUH_VENDOR              0
 
@@ -113,11 +113,12 @@
 
 // Set Line Control state on enumeration/mounted:
 // DTR ( bit 0), RTS (bit 1)
-#define CFG_TUH_CDC_LINE_CONTROL_ON_ENUM    0x03
+#define CFG_TUH_CDC_LINE_CONTROL_ON_ENUM    0x01
 
 // Set Line Coding on enumeration/mounted, value for cdc_line_coding_t
 // bit rate = 115200, 1 stop bit, no parity, 8 bit data width
-#define CFG_TUH_CDC_LINE_CODING_ON_ENUM   { 115200, CDC_LINE_CONDING_STOP_BITS_1, CDC_LINE_CODING_PARITY_NONE, 8 }
+//#define CFG_TUH_CDC_LINE_CODING_ON_ENUM   { 115200, CDC_LINE_CONDING_STOP_BITS_1, CDC_LINE_CODING_PARITY_NONE, 8 }
+#define CFG_TUH_CDC_LINE_CODING_ON_ENUM   { 1050000, CDC_LINE_CONDING_STOP_BITS_1, CDC_LINE_CODING_PARITY_NONE, 8 }
 
 
 #ifdef __cplusplus

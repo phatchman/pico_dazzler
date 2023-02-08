@@ -10,6 +10,8 @@
 #include "pico/multicore.h"
 #include "hardware/clocks.h"
 
+#include "usb_joystick.h"
+
 /* TODOS:
  */
 
@@ -25,7 +27,8 @@
 #define HEIGHT  128
 #define NUMCLR  16
 
-#define DEBUG
+//#define DEBUG
+#define DEBUG0
 
 /* Dazzler packet types */
 #define DAZ_MEMBYTE   0x10
@@ -151,6 +154,14 @@ uint8_t *usb_rd = usb_buffer;
 /* Return # bytes avail. TODO: This can probably just be bool */
 bool usb_avail()
 {
+#if 0
+    bool result = usb_rd != usb_wr;
+    if (result)
+        printf("\r\nA\r\n");
+    else
+        printf("rd = %lx, wr = %lx\r\n", usb_rd, usb_wr);
+    return result;
+#endif
     return usb_rd != usb_wr;
 }
 
@@ -159,13 +170,20 @@ uint8_t usb_getbyte()
     uint8_t result = 0;
     if (usb_avail())
     {
-        result = *(++usb_rd);
+        usb_rd++;
     	if (usb_rd >= (usb_buffer + USB_BUFFER_SIZE))
     	{
             usb_rd = usb_buffer;
     	}
+        result = *usb_rd;
     }
     return result;
+}
+
+uint8_t usb_getbyte_blocking()
+{
+    while(!usb_avail()) { tuh_task(); }
+    return usb_getbyte();
 }
 
 /* set a byte into usb buffer 
@@ -176,11 +194,35 @@ void usb_setbyte(uint8_t byte)
     uint8_t* wr_pos = usb_wr + 1;
     if (wr_pos >= (usb_buffer + USB_BUFFER_SIZE))
     {
+#ifdef DEBUG0
+        printf ("USB BUFFER WRAPPED\r\n");
+#endif
         wr_pos = usb_buffer;
     }
     *wr_pos = byte;
     usb_wr = wr_pos;
 }
+
+void usb_send_byte(uint8_t *buf, int count)
+{
+  // loop over all mounted interfaces
+  for(uint8_t idx=0; idx<CFG_TUH_CDC; idx++)
+  {
+    if ( tuh_cdc_mounted(idx) )
+    {
+      // console --> cdc interfaces
+      if (count)
+      {
+#ifdef DEBUG
+    printf("usb_write: %d, %d\r\n", idx, count);
+#endif
+        tuh_cdc_write(idx, buf, count);
+        tuh_cdc_write_flush(idx);
+      }
+    }
+  }
+}
+
 
 /*
  * The current video mode, set by DAZ_CTRLPIC
@@ -201,6 +243,7 @@ void __time_critical_func(render_loop) (void)
         uint16_t *frame_buf = &frame_buffer[scanline * WIDTH];
 
         memcpy(vga_buf, frame_buf, WIDTH * 2);
+        /* TODO: can just make this vga_buf[WIDTH/2] */
         vga_buf += WIDTH/2;
         *vga_buf = COMPOSABLE_EOL_ALIGN << 16;
 
@@ -209,6 +252,8 @@ void __time_critical_func(render_loop) (void)
         vga_buf[1] = (vga_buf[1] & 0xFFFF0000) | (WIDTH - 2);
         buffer->data_used = (WIDTH + 4) / 2;
         scanvideo_end_scanline_generation (buffer);
+        /* poll joysticks once per frame */
+//        schedule_joy_input();
     }
 }
 
@@ -235,8 +280,13 @@ void set_pixel_128(int x, int y, int colour)
 
 void set_pixel_64(int x, int y, int colour)
 {
+#ifdef DEBUG2
+    printf("x = %d, y = %d, Colour = %x, %x\n", x, y, colour, clr_table[colour]);
+#endif
+
     x = x * 2;
     y = y * 2;
+    colour &= 0x0F;
     int start = y * WIDTH + x;
     if (x >= 0 && x < WIDTH && y >=0 && y < HEIGHT)
     {
@@ -252,6 +302,7 @@ void set_pixel_32(int x, int y, int colour)
 {
     x = x * 4;
     y = y * 4;
+    colour &= 0x0F;
     int start = y * WIDTH + x;
     if (x >= 0 && x < WIDTH && y >=0 && y < HEIGHT)
     {
@@ -290,6 +341,11 @@ void process_usb_commands()
     gpio_set_dir(LED_PIN, GPIO_OUT);
     int led_status = 0;
 
+    absolute_time_t abs_time = get_absolute_time();
+    /* poll joystick every 100 ms-ish*/
+    absolute_time_t joy_poll_time = make_timeout_time_ms(10);
+
+
 #if 0
     while (true)
     {
@@ -304,16 +360,26 @@ void process_usb_commands()
     uint8_t c = 0;
     while (true)
     {
+        abs_time = get_absolute_time();
+
         if (!usb_avail())
         {
+            if (abs_time >= joy_poll_time)
+            {
+                schedule_joy_input();
+                joy_poll_time = make_timeout_time_ms(10);
+            }
        	    tuh_task();
             continue;
         }
         c = usb_getbyte();
+//        set_vram(16,0x1f,false);
+#ifdef DEBUG
+    printf(".");
+#endif
 //        putchar(c);
-//	continue;
+//    	continue;
    
-        absolute_time_t abs_time = get_absolute_time();
         led_status = (to_ms_since_boot(abs_time) / 50) % 2;
         gpio_put(LED_PIN, led_status);
 
@@ -321,42 +387,70 @@ void process_usb_commands()
         {
             case DAZ_VERSION:
             {
+#ifdef DEBUG
+    printf("VERSION\r\n");
+#endif
                 static uint8_t buf[3];
                 buf[0] = DAZ_VERSION | (DAZZLER_VERSION & 0x0F);
-                buf[1] = FEAT_VIDEO | FEAT_FRAMEBUF;
+                buf[1] = FEAT_VIDEO | FEAT_FRAMEBUF | FEAT_JOYSTICK;
                 buf[2] = 0;
-                fwrite(buf, 1, 3, stdout);
+                usb_send_byte(buf, 3);
                 break;
             }
             case DAZ_CTRL:
             {
+#ifdef DEBUG
+    printf("DAZ_CTRL\r\n");
+#endif
                 if ((c & 0x0F) == 0)
                 {
+#ifdef DEBUG
+    printf("DAZ_CTRL 1\r\n");
+#endif
                     uint8_t prev_dazzler_ctrl = dazzler_ctrl;
-                    dazzler_ctrl = (uint8_t) getchar();
+                    dazzler_ctrl = (uint8_t) usb_getbyte_blocking();
                     if (dazzler_ctrl != prev_dazzler_ctrl)
                     {
+#ifdef DEBUG
+    printf("DAZ_CTRL ON\r\n");
+#endif
+
                         /* If Dazzler is turned on */
                         if (dazzler_ctrl & 0x80)
                         {
+#ifdef DEBUG
+    printf("DAZ_CTRL REFRESH\r\n");
+#endif
                             refresh_vram();
+#ifdef DEBUG
+    printf("DAZ_CTRL REFRESH DONE\r\n");
+#endif
                         }
                         else /* Dazzler turned off */
                         {
+#ifdef DEBUG
+    printf("DAZ_CTRL OFF\r\n");
+#endif
                             /* blank screen */
                             memset(frame_buffer, 0, sizeof(frame_buffer));
                         }
                     }
                 }
+#ifdef DEBUG
+    printf("DAZ_CTRL END\r\n");
+#endif
                 break;
             }
             case DAZ_CTRLPIC:
             {
+#ifdef DEBUG
+    printf("DAZ_CTRLPIC\r\n");
+#endif
                 uint8_t prev_picture_ctrl = dazzler_picture_ctrl;
 
                 if ((c & 0x0F) == 0)
                 {
-                    dazzler_picture_ctrl = (uint8_t) getchar();
+                    dazzler_picture_ctrl = (uint8_t) usb_getbyte_blocking();
 
                     /* If the picture control changed, set the video mode and colour palette */
                     if (prev_picture_ctrl != dazzler_picture_ctrl)
@@ -377,28 +471,49 @@ void process_usb_commands()
                         refresh_vram();
                     }
                 }
+#ifdef DEBUG
+    printf("DAZ_CTRLPIC END\r\n");
+#endif
                 break;
             }
             case DAZ_MEMBYTE:
             {
-                int addr = (c & 0x0F) * 256 + (uint8_t) getchar();
-                uint8_t value = (uint8_t) getchar();
+#ifdef DEBUG
+    printf("DAZ_MEMBYTE\r\n");
+#endif
+
+                int addr = (c & 0x0F) * 256 + (uint8_t) usb_getbyte_blocking();
+                uint8_t value = (uint8_t) usb_getbyte_blocking();
                 set_vram(addr, value, false);
                 break;
             }
             case DAZ_FULLFRAME:
             {
+#ifdef DEBUG
+    printf("DAZ_FULLFRAME\r\n");
+#endif
                 if((c & 0x06) == 0)
                 {
+#ifdef DEBUG
+    printf("DAZ_FULLFRAME 1\r\n");
+#endif
                     int addr = (c & 0x08) * 256;
                     int count = (c & 0x01) ? 2048 : 512;
-
+#ifdef DEBUG
+    printf("DAZ_FULLFRAME %d, %d\r\n", addr, count);
+#endif
                     for (int i = 0 ; i < count ; i++)
                     {
-                        uint8_t value = (uint8_t) getchar();
+#ifdef DEBUG
+    printf("DAZ_FULLFRAME %d\r\n", i);
+#endif
+                        uint8_t value = (uint8_t) usb_getbyte_blocking();
                         set_vram(addr + i, value, false);
                     }
                 }
+#ifdef DEBUG
+    printf("DAZ_FULLFRAME_END\r\n");
+#endif
                 break;
             }
         }
@@ -410,8 +525,8 @@ void process_usb_commands()
 
 void set_vram(int addr, uint8_t value, bool refresh)
 {
-#ifdef DEBUG
-    printf ("set_vram(%d,%x)\n", addr, value);
+#ifdef DEBUG2
+    printf ("set_vram(%d,%x, %d)\n", addr, value, refresh);
 #endif
     /* raw_frame stores a copy of the Dazzler video ram. 
      * When setting ram values, copy into the raw_frame and vga framebuffer
@@ -429,7 +544,6 @@ void set_vram(int addr, uint8_t value, bool refresh)
     {
         case mode_128x128m:
         {
-//            printf("Mode = 128x128m");
             /* In this mode each byte contains 8 individual on/off pixels*/
             /* this also needs to do the different addressing for each quater of the screen */
             if (addr < 512)             /* First quadrant */
@@ -556,22 +670,35 @@ while(1)
     int clr = 0;
     sleep_ms(1000);
     
-//    multicore_launch_core1(core1_main);
+    multicore_launch_core1(core1_main);
 #ifdef DEBUG
     printf("processing serial commands\n");
 #endif
+
+//dazzler_picture_ctrl = 0b01011100; // 64m
+//dazzler_picture_ctrl = 0b00110000; // 64c
+//video_mode = mode_64x64c;
+#if 0
+for (int addr = 0 ; addr < 2048 ; addr++)
+{
+    set_vram(addr, 0x0cc, false);
+}
+#endif
+//    set_vram(16,0xff,false);
+    printf("READY\n");
     process_usb_commands();
 //    while(true){ tuh_task(); }
 }
 
-
-
 void tuh_cdc_rx_cb(uint8_t idx)
 {
-    uint8_t buf[64]; // +1 for extra null character
-
+    static uint8_t buf[512]; // +1 for extra null character
+#ifdef DEBUG
+    //printf("*");
+#endif
     // forward cdc interfaces -> console
     uint32_t count = tuh_cdc_read(idx, buf, sizeof(buf));
+ //   printf("rx: %d, count = %d\r\n", idx, count);
     for (int i = 0 ; i < count ; i++)
     {
         usb_setbyte(buf[i]);
