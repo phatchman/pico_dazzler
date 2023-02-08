@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.13)
-set(PICO_BOARD pico)
+set(PICO_BOARD vgaboard)
 set(BOARD pico_sdk)
 set(FAMILY rp2040)
 include(tinyusb/hw/bsp/family_support.cmake)
@@ -15,6 +15,8 @@ include_directories(~/src/pico_dazzler)
 
 add_executable(pico_dazzler
   main.c
+  usb_joystick.c
+  parse_descriptor.c
  )
 target_compile_definitions(pico_dazzler PUBLIC -DPICO_SCANVIDEO_MAX_SCANLINE_BUFFER_WORDS=322
   -DPICO_SCANVIDEO_SCANLINE_BUFFER_COUNT=8)

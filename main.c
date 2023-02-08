@@ -343,7 +343,7 @@ void process_usb_commands()
 
     absolute_time_t abs_time = get_absolute_time();
     /* poll joystick every 100 ms-ish*/
-    absolute_time_t joy_poll_time = make_timeout_time_ms(10);
+    absolute_time_t joy_poll_time = make_timeout_time_ms(50);
 
 
 #if 0
@@ -367,7 +367,7 @@ void process_usb_commands()
             if (abs_time >= joy_poll_time)
             {
                 schedule_joy_input();
-                joy_poll_time = make_timeout_time_ms(10);
+                joy_poll_time = make_timeout_time_ms(50);
             }
        	    tuh_task();
             continue;

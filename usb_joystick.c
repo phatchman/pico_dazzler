@@ -14,63 +14,81 @@
 
 static usb_joystick joysticks[2];
 
-static bool joy_mounted = false;
+static uint16_t hid_report_status = -1;
 
 /* TODO: this is defined in main. Also it is a dumb name for this */
 void usb_send_byte(uint8_t *buf, int count);
-void process_joy_input(uint8_t joynum, const uint8_t* report, uint8_t len);
+void process_joy_input(int joynum, usb_joystick* joy);
 bool tuh_hid_receive_report(uint8_t dev_addr, uint8_t instance);
+
+bool is_ps3_controller(uint16_t pid)
+{
+    return (pid == 0x0268);
+}
 
 // Invoked when device with hid interface is mounted
 void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_report, uint16_t desc_len)
 {
-  uint16_t vid, pid;
-  tuh_vid_pid_get(dev_addr, &vid, &pid);
-  uint8_t joystick_hid[4] = { 0x05, 0x01, 0x09, 0x04 };
-  uint8_t gamepad_hid[4] = { 0x05, 0x01, 0x09, 0x05 };
+    uint16_t vid, pid;
+    tuh_vid_pid_get(dev_addr, &vid, &pid);
+    
+    /* Usage page values for Joystick and Gamepad */
+    uint8_t joystick_hid[4] = { 0x05, 0x01, 0x09, 0x04 };
+    uint8_t gamepad_hid[4] = { 0x05, 0x01, 0x09, 0x05 };
 
-  printf("HID device address = %d, instance = %d is mounted\r\n", dev_addr, instance);
-  printf("Instance = %d, VID = %04x, PID = %04x\r\n", instance, vid, pid);
-  for (int i = 0 ; i < desc_len ; i++)
-  {
-    printf("%02X ", desc_report[i]);
-    if ((i % 20) == 19) printf("\r\n");
-  }
-  printf("\r\n");
-
-  if (!memcmp(desc_report, joystick_hid, sizeof (joystick_hid)) ||
-    !memcmp(desc_report, gamepad_hid, sizeof (gamepad_hid)))
-  {
-    printf("JOYSTICK or GAMEPAD connected\r\n");
-    for (int i = 0 ; i < 2 ; i++)
+    printf("HID device address = %d, instance = %d is mounted\r\n", dev_addr, instance);
+    printf("Instance = %d, VID = %04x, PID = %04x\r\n", instance, vid, pid);
+    for (int i = 0 ; i < desc_len ; i++)
     {
-      if (!joysticks[i].connected)
-      {
-        joysticks[i].dev_addr = dev_addr;
-        joysticks[i].instance = instance;
-        memset(&joysticks[i].prev_report, 0, sizeof(joystick_report));
-        joysticks[i].connected = true;
-        printf("Connected as joystick %d\n", i);
-        joy_mounted = true;
-        break;      
-      }
+        printf("%02X ", desc_report[i]);
+        if ((i % 20) == 19) printf("\r\n");
     }
-  }
+    printf("\r\n");
 
-#ifdef NOTUSED
-  void PS3USB::enable_sixaxis() { // Command used to enable the Dualshock 3 and Navigation controller to send data via USB
-        uint8_t cmd_buf[4];
-        cmd_buf[0] = 0x42; // Special PS3 Controller enable commands
-        cmd_buf[1] = 0x0c;
-        cmd_buf[2] = 0x00;
-        cmd_buf[3] = 0x00;
+    if (!memcmp(desc_report, joystick_hid, sizeof (joystick_hid)) ||
+        !memcmp(desc_report, gamepad_hid, sizeof (gamepad_hid)))
+    {
+        printf("JOYSTICK or GAMEPAD connected\r\n");
+        for (int i = 0 ; i < 2 ; i++)
+        {
+            if (!joysticks[i].connected)
+            {
+                memset(&joysticks[i], 0, sizeof(usb_joystick));
 
-        // bmRequest = Host to device (0x00) | Class (0x20) | Interface (0x01) = 0x21, 
-        // bRequest = Set Report (0x09), Report ID (0xF4), Report Type (Feature 0x03), 
-        // interface (0x00), datalength, datalength, data)
-        pUsb->ctrlReq(bAddress, epInfo[PS3_CONTROL_PIPE].epAddr, bmREQ_HID_OUT, HID_REQUEST_SET_REPORT, 
-        0xF4, 0x03, 0x00, 4, 4, cmd_buf, NULL);
-#endif
+                joysticks[i].dev_addr = dev_addr;
+                joysticks[i].instance = instance;
+                if (parse_report_descriptor(pid, desc_report, desc_len, &joysticks[i].offsets))
+                {
+                    joysticks[i].connected = true;
+                    printf("Connected as joystick %d\n", i);
+                    if (is_ps3_controller(pid))
+                    {
+                        /* PS3 controller needs a command to tell it to start sending reports */
+                        static  uint8_t cmd_buf[] = { 0x42, 0x0c, 0x00, 0x00 };
+                        printf("SENDING PS3 REPORT\r\n");
+                        
+                        hid_report_status = -1;
+                        tuh_hid_set_report(dev_addr, instance, 0xF4, 
+                                            HID_REPORT_TYPE_FEATURE, cmd_buf, sizeof(cmd_buf));
+                        while (hid_report_status == -1)
+                        {
+                            /* wait for response from set report*/
+                            tuh_task();
+                        }
+                        if (hid_report_status == 0)
+                        {
+                            printf ("ERROR configuring PS3 controller\n");
+                        }
+                    }
+                }
+                else
+                {
+                    printf("Error parsing joystick HID report descriptor\n");
+                }
+                break;      
+            }
+        }
+    }
 }
 
 // Invoked when device with hid interface is un-mounted
@@ -88,173 +106,101 @@ void tuh_hid_umount_cb(uint8_t dev_addr, uint8_t instance)
   }
 }
 
-#define DEBUGXXX
+//#define DEBUGXXX
 // Invoked when received report from device via interrupt endpoint
 
-static uint8_t prev_report[256];
 void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* report, uint16_t len)
 {
-  if (memcmp(prev_report, report, len))
-  {
-    for (int i = 0 ; i < len ; i++)
+//    printf("tuh_hid_report_received_cb\n");
+    for (int i = 0 ; i < 2 ; i++)
     {
-      printf("%02X ", report[i]);
-      if ((i % 16) == 15) printf("\r\n");
-    }
-    printf("\r\n");
-  
-    for (int i = 0 ; i < len ; i++)
-    {
-      if(report[i] != prev_report[i]) printf("%d = %02X:%02X ", i, report[i], prev_report[i]);
-    }
-    printf("\r\n");
-    memcpy(prev_report, report, len);
 
-  }
-
-  sleep_ms(2000);
-#if 0
-#ifdef DEBUGXXX
-  printf("hid_report\n");
-#endif
-  for (int i = 0 ; i < 2 ; i++)
-  {
-    if (joysticks[i].connected &&
-      joysticks[i].dev_addr == dev_addr && 
-      joysticks[i].instance == instance)
-
-      process_joy_input(i, report, len);
-  }
-  #ifdef DEBUGXXX
-  printf("tuh_hid_receive_report(%d, %d)\r\n", dev_addr, instance);
-#endif
-#endif
-      if ( !tuh_hid_receive_report(dev_addr, instance) )
+      /* check if joystick is connected and values have changed since last report */
+      if(joysticks[i].dev_addr == dev_addr &&
+         joysticks[i].instance == instance &&
+         joysticks[i].connected &&
+        /* If there are multiple report types, the reportid is assumed to be the first byte */
+         (!joysticks[i].offsets.has_report_id || joysticks[i].offsets.report_id == report[0]) &&
+         (joysticks[i].prev_x != report[joysticks[i].offsets.x_axis_byte] ||
+         joysticks[i].prev_y != report[joysticks[i].offsets.y_axis_byte] ||
+         joysticks[i].prev_buttons != report[joysticks[i].offsets.buttons_byte]))
       {
-        printf("Error: cannot request to receive report\r\n");
+          joysticks[i].x = report[joysticks[i].offsets.x_axis_byte];
+          joysticks[i].y = report[joysticks[i].offsets.y_axis_byte];
+          uint8_t buttons = report[joysticks[i].offsets.buttons_byte];
+          joysticks[i].buttons = buttons;
+          joysticks[i].b1 = buttons & joysticks[i].offsets.b1_mask;
+          joysticks[i].b2 = buttons & joysticks[i].offsets.b2_mask;
+          joysticks[i].b3 = buttons & joysticks[i].offsets.b3_mask;
+          joysticks[i].b4 = buttons & joysticks[i].offsets.b4_mask;
+          
+          process_joy_input(i, &joysticks[i]);
+          joysticks[i].prev_x = report[joysticks[i].offsets.x_axis_byte];
+          joysticks[i].prev_y = report[joysticks[i].offsets.y_axis_byte];
+          joysticks[i].prev_buttons = report[joysticks[i].offsets.buttons_byte];
+          break;
       }
-
+  }
 }
 
+/*
+ * Request to receive a HID report from the joystick. 
+ */
 void schedule_joy_input()
 {
-  if (joy_mounted)
-  {
-    static  uint8_t cmd_buf[] = { 0x42, 0x0c, 0x00, 0x00 };
-    printf("SENDING PS3 REPoRT\r\n");
-    
-    sleep_ms(1000);
-
-    tuh_hid_set_report(joysticks[0].dev_addr, joysticks[0].instance, 0xF4, HID_REPORT_TYPE_FEATURE, cmd_buf, sizeof(cmd_buf));
-/* 
-static    uint8_t led_buf[] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                                     0x00, 0x02, 0xff, 0x27, 0x10, 0x00, 0x32, 0xff, 
-                                     0x27, 0x10, 0x00, 0x32, 0xff, 0x27, 0x10, 0x00, 
-                                     0x32, 0xff, 0x27, 0x10, 0x00, 0x32, 0x00, 0x00, 
-                                     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                                     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
-*/
-  printf ("LED1\n");
-//  tuh_hid_set_report(joysticks[0].dev_addr, joysticks[0].instance, 0x01, HID_REPORT_TYPE_OUTPUT, led_buf, sizeof(led_buf));
-
-  printf ("FEATURE\n");
-//  tuh_hid_set_report(joysticks[0].dev_addr, joysticks[0].instance, 0xF4, HID_REPORT_TYPE_FEATURE, cmd_buf, 4);
-  
-    joy_mounted = false;
-  }
+    for (int i = 0 ; i < 2 ; i++)
+    {
+        if (joysticks[i].connected)
+        {
+            bool result = tuh_hid_receive_report(joysticks[i].dev_addr, joysticks[i].instance);
+#ifdef DEBUG
+            printf("tuh_hid_receive_report(%d, %d) = %d\n", joysticks[i].dev_addr, joysticks[i].instance, result);
+#endif
+        }
+    }
 }
   
-
+/*
+ * HID Set reports are async. setting status to not be -1 indicates that status send is complete.
+ * A non-zero value in hid_report_status indicates success.
+ */
 void tuh_hid_set_report_complete_cb(uint8_t dev_addr, uint8_t instance, uint8_t report_id, 
       uint8_t report_type, uint16_t len)
 {
-  printf("tuh_hid_set_report_complete_cb\n");
-  switch(report_id)
-  {
-    case 0xF4:
-      printf("tuh_hid_receive_report\r\n");
-      while (!tuh_hid_receive_report(dev_addr, instance))
-      {
-        printf("Error: cannot request to receive report\r\n");
-        tuh_task();
-      }
-      break;
-  }
-
-
-
-#if 0
-  // continue to request to receive report
-  for (int i = 0 ; i < 2 ; i++)
-  {
-    if (joysticks[i].connected)
-    {
-#ifdef DEBUGXXX
-  printf("tuh_hid_receive_report(%d, %d)\r\n", joysticks[i].dev_addr, joysticks[i].instance);
-#endif
-      if ( !tuh_hid_receive_report(joysticks[i].dev_addr, joysticks[i].instance) )
-      {
-        printf("Error: cannot request to receive report\r\n");
-      }
-    }
-  }
-#endif
+    hid_report_status = len;
 }
 
 uint8_t get_joy_value_x (uint8_t value)
 {
-  switch(value)
-  {
-    case 127:
-      return 0;
-    case 0:
-      return -127;
-    case 255:
-      return 127;
-  }
+    int16_t sval = value;
+    sval -= 127;
+    if (sval == 128) sval -= 2;
+    return (uint8_t) sval;
 }
-
 
 uint8_t get_joy_value_y (uint8_t value)
 {
-  switch(value)
-  {
-    case 127:
-      return 0;
-    case 0:
-      return 127;
-    case 255:
-      return -127;
-  }
+    int16_t sval = value;
+    sval -= 127;
+    sval = -sval;
+    if (sval == -128) sval += 1;
+    return (uint8_t) sval;
 }
 
-void process_joy_input(uint8_t joynum, const uint8_t* report, uint8_t len)
+void process_joy_input(int joynum, usb_joystick* joy)
 {
-  joystick_report* joy_rpt = (joystick_report *) report;
-
-  for (int i = 0 ; i < len ; i++)
-  {
-    printf("%02X ", report[i]);
-  }
-  printf("\r\n");
-  if (memcmp(joy_rpt, &joysticks[joynum].prev_report, sizeof(joystick_report)))
-  {
-    memcpy(&joysticks[joynum].prev_report, joy_rpt, sizeof(joystick_report));
-
     uint8_t daz_msg[3];
     daz_msg[0] = (joynum == 0) ? DAZ_JOY1 : DAZ_JOY2;
-    if (!joy_rpt->btn1) daz_msg[0] |= 1;
-    if (!joy_rpt->btn2) daz_msg[0] |= 2;
-    if (!joy_rpt->btn3) daz_msg[0] |= 4;
-    if (!joy_rpt->btn4) daz_msg[0] |= 8;
-    daz_msg[1] = get_joy_value_x(joy_rpt->x);
-    daz_msg[2] = get_joy_value_y(joy_rpt->y);
+    if (!joy->b1) daz_msg[0] |= 1;
+    if (!joy->b2) daz_msg[0] |= 2;
+    if (!joy->b3) daz_msg[0] |= 4;
+    if (!joy->b4) daz_msg[0] |= 8;
+    daz_msg[1] = get_joy_value_x(joy->x);
+    daz_msg[2] = get_joy_value_y(joy->y);
     
  //   printf ("Sending joystick report\r\n");
- #ifndef DEBUGXXX
-    printf("Joy = %d, X = %d, Y = %d, btn = %x msg[0] = %02x\r\n", joynum, (int8_t) daz_msg[1], (int8_t) daz_msg[2], daz_msg[0] & 0x0F, daz_msg[0]);
- #endif
+#ifdef DEBUGXXX
+    printf("Joy = %d, X = %d, Y = %d, btn = %x, msg[0] = %02x\r\n", joynum, (int8_t) daz_msg[1], (int8_t) daz_msg[2], daz_msg[0] & 0x0F, daz_msg[0]);
+#endif
     usb_send_byte(daz_msg, 3);
-  }
-
 }
