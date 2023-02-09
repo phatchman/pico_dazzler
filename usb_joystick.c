@@ -1,32 +1,31 @@
 #include "usb_joystick.h"
-
 #include "bsp/board.h"
 #include "tusb.h"
-
 #include <string.h>
 
-
-
-
+/* Commands sent to Altair-duino */
 #define DAZ_JOY1      0x10
 #define DAZ_JOY2      0x20
 #define DAZ_KEY       0x30
 
+/* Support 2 joysticks */
 static usb_joystick joysticks[2];
 
+/* Global used when calling hid_set_report so can block until result is received */
 static uint16_t hid_report_status = -1;
 
-/* TODO: this is defined in main. Also it is a dumb name for this */
-void usb_send_byte(uint8_t *buf, int count);
+void usb_send_bytes(uint8_t *buf, int count);
 void process_joy_input(int joynum, usb_joystick* joy);
 bool tuh_hid_receive_report(uint8_t dev_addr, uint8_t instance);
 
+/* Return true if PS3 controller is connected. This controller needs 
+ * additional USB commands to enable it */
 bool is_ps3_controller(uint16_t pid)
 {
     return (pid == 0x0268);
 }
 
-// Invoked when device with hid interface is mounted
+/* Callback when Invoked when device with hid interface is mounted */
 void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_report, uint16_t desc_len)
 {
     uint16_t vid, pid;
@@ -38,12 +37,15 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_re
 
     printf("HID device address = %d, instance = %d is mounted\r\n", dev_addr, instance);
     printf("Instance = %d, VID = %04x, PID = %04x\r\n", instance, vid, pid);
+
+#ifdef DEBUG
     for (int i = 0 ; i < desc_len ; i++)
     {
         printf("%02X ", desc_report[i]);
         if ((i % 20) == 19) printf("\r\n");
     }
     printf("\r\n");
+#endif
 
     if (!memcmp(desc_report, joystick_hid, sizeof (joystick_hid)) ||
         !memcmp(desc_report, gamepad_hid, sizeof (gamepad_hid)))
@@ -91,7 +93,7 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_re
     }
 }
 
-// Invoked when device with hid interface is un-mounted
+/* Invoked when device with hid interface is un-mounted */
 void tuh_hid_umount_cb(uint8_t dev_addr, uint8_t instance)
 {
   printf("HID device address = %d, instance = %d is unmounted\r\n", dev_addr, instance);
@@ -107,8 +109,7 @@ void tuh_hid_umount_cb(uint8_t dev_addr, uint8_t instance)
 }
 
 //#define DEBUGXXX
-// Invoked when received report from device via interrupt endpoint
-
+/* Invoked when received report from device via interrupt endpoint */
 void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* report, uint16_t len)
 {
 //    printf("tuh_hid_report_received_cb\n");
@@ -139,8 +140,8 @@ void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t cons
           joysticks[i].prev_y = report[joysticks[i].offsets.y_axis_byte];
           joysticks[i].prev_buttons = report[joysticks[i].offsets.buttons_byte];
           break;
-      }
-  }
+        }
+    }
 }
 
 /*
@@ -170,6 +171,7 @@ void tuh_hid_set_report_complete_cb(uint8_t dev_addr, uint8_t instance, uint8_t 
     hid_report_status = len;
 }
 
+
 uint8_t get_joy_value_x (uint8_t value)
 {
     int16_t sval = value;
@@ -187,6 +189,7 @@ uint8_t get_joy_value_y (uint8_t value)
     return (uint8_t) sval;
 }
 
+/* Send joystick input to Altair-duino */
 void process_joy_input(int joynum, usb_joystick* joy)
 {
     uint8_t daz_msg[3];
@@ -202,5 +205,5 @@ void process_joy_input(int joynum, usb_joystick* joy)
 #ifdef DEBUGXXX
     printf("Joy = %d, X = %d, Y = %d, btn = %x, msg[0] = %02x\r\n", joynum, (int8_t) daz_msg[1], (int8_t) daz_msg[2], daz_msg[0] & 0x0F, daz_msg[0]);
 #endif
-    usb_send_byte(daz_msg, 3);
+    usb_send_bytes(daz_msg, 3);
 }
