@@ -54,14 +54,14 @@
 //--------------------------------------------------------------------
 // COMMON CONFIGURATION
 //--------------------------------------------------------------------
-#define CFG_TUH_API_EDPT_XFER 1
+#define CFG_TUH_API_EDPT_XFER 0
 // defined by compiler flags for flexibility
 #ifndef CFG_TUSB_MCU
 #error CFG_TUSB_MCU must be defined
 #endif
 
 #ifndef CFG_TUSB_OS
-#define CFG_TUSB_OS           OPT_OS_NONE
+#define CFG_TUSB_OS           OPT_OS_PICO
 #endif
 
 #ifndef CFG_TUSB_DEBUG
@@ -116,13 +116,12 @@
 #define CFG_TUH_CDC_LINE_CONTROL_ON_ENUM    0x01
 
 // Set Line Coding on enumeration/mounted, value for cdc_line_coding_t
-// bit rate = 115200, 1 stop bit, no parity, 8 bit data width
-//#define CFG_TUH_CDC_LINE_CODING_ON_ENUM   { 115200, CDC_LINE_CONDING_STOP_BITS_1, CDC_LINE_CODING_PARITY_NONE, 8 }
+// bit rate = 1050000, 1 stop bit, no parity, 8 bit data width
 #define CFG_TUH_CDC_LINE_CODING_ON_ENUM   { 1050000, CDC_LINE_CONDING_STOP_BITS_1, CDC_LINE_CODING_PARITY_NONE, 8 }
 
 
 #ifdef __cplusplus
- }
+}
 #endif
 
 #endif /* _TUSB_CONFIG_H_ */

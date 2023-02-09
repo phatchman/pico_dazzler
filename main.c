@@ -27,8 +27,10 @@
 #define HEIGHT  128
 #define NUMCLR  16
 
+#define JOY_POLL_MS   16 /* Poll the joysticks ~ 60 times per second */
+
 //#define DEBUG
-#define DEBUG0
+//#define DEBUG0
 
 /* Dazzler packet types */
 #define DAZ_MEMBYTE   0x10
@@ -62,21 +64,27 @@ void refresh_vram(void);
  * D6-D0: screen memory location (not used in client)
  */ 
 uint8_t dazzler_ctrl = 0x00;
-
 /* 
  * Dazzler picture control register:
  * D7: not used
  * D6: 1=resolution x4, 0=normal resolution
  * D5: 1=2k memory, 0=512byte memory
- * D4: 1=color, 0=monochrome
+ * D4: 1=color, 0=b/w
  * D3-D0: foreground color for x4 high res mode
  */
+uint8_t dazzler_picture_ctrl = 0x00;    /* normal res, 512 byte, b/w */
+/*
+ * The current video mode, set by DAZ_CTRLPIC
+ */
+enum { mode_32x32c, mode_64x64m, mode_64x64c, mode_128x128m } video_mode = mode_64x64m;
+
+/* Bitmasks for dazzler_picture_ctrl */
 #define DPC_RESOLUTION  0x40
 #define DPC_MEMORY      0x20
 #define DPC_COLOUR      0x10
 #define DPC_FOREGROUND  0x0F
-uint8_t dazzler_picture_ctrl = 0x10;
 
+/* 16 colours used in colour mode */
 uint16_t    colours[NUMCLR] =
 {
     PICO_SCANVIDEO_PIXEL_FROM_RGB8(  0u,   0u,   0u),
@@ -97,6 +105,7 @@ uint16_t    colours[NUMCLR] =
     PICO_SCANVIDEO_PIXEL_FROM_RGB8(255u, 255u, 255u)
 };
 
+/* 16 colours used in black and white mode */
 uint16_t    greys[NUMCLR] =
 {
     PICO_SCANVIDEO_PIXEL_FROM_RGB8(  0u,   0u,   0u),
@@ -118,10 +127,10 @@ uint16_t    greys[NUMCLR] =
 };
 
 /* Points to the colours table in colour modes and the greys table in B&W modes */
-uint16_t *clr_table = colours;
+uint16_t *clr_table = greys;
 
 /*
- * Create a custom video mode that is 128x128 scaled to 
+ * Create a custom scanvideo mode that is 128x128 scaled to 
  * 1024 x 768.
  */
 extern const scanvideo_timing_t vga_timing_1024x768_60_default;
@@ -135,36 +144,37 @@ const scanvideo_mode_t vga_mode_128x128 =
     .yscale = 6,
 };
 
-/* Framebuffer with 16 bits per pixel as
- * the scanline vga library needs 16 bits per pixel colour
+/* 
+ * Framebuffer with 16 bits per pixel as the scanline vga library uses
+ * 16 bits per pixel colour.
  */
 uint16_t frame_buffer[WIDTH * HEIGHT];
 
-/* The "control port" data is being sent after the frame data, event with the FRAMEBUF 
- * attribute being sent. So as a work-around store the raw frame data and redraw the
- * frame every time we get a CTRL_PIC packet.
+/* 
+ * This is a copy of the Altair's video ram. We need a copy of this because:
+ * 1) When applications change modes, we need to refresh the scanvideo frame buffer from the altair RAM
+ * 2) The Altair-duino dazzler code oftens sends the video rame bytes before the video mode, and need to
+ *    refresh the scanvideo framebuffer whenever the video mode changes.
  */
 uint8_t raw_frame[2048];
 
+/*************************************************************
+ * USB Serial port handling                                  *
+ *************************************************************/
+
+/* USB receive ring buffer */
 #define USB_BUFFER_SIZE 4096
 uint8_t usb_buffer[USB_BUFFER_SIZE];
 uint8_t *usb_wr = usb_buffer;
 uint8_t *usb_rd = usb_buffer;
 
-/* Return # bytes avail. TODO: This can probably just be bool */
+/* Return true if bytes available to be read */
 bool usb_avail()
 {
-#if 0
-    bool result = usb_rd != usb_wr;
-    if (result)
-        printf("\r\nA\r\n");
-    else
-        printf("rd = %lx, wr = %lx\r\n", usb_rd, usb_wr);
-    return result;
-#endif
     return usb_rd != usb_wr;
 }
 
+/* Return top byte from usb buffer, or 0 if no bytes available */
 uint8_t usb_getbyte()
 {
     uint8_t result = 0;
@@ -180,15 +190,14 @@ uint8_t usb_getbyte()
     return result;
 }
 
+/* Return the top byte from usb buffer. Block until data is available */
 uint8_t usb_getbyte_blocking()
 {
     while(!usb_avail()) { tuh_task(); }
     return usb_getbyte();
 }
 
-/* set a byte into usb buffer 
- * note write byte before incrementing pointer to make multi-thread safe
- * Well it probably really needs more than that. TODO: to check */
+/* set a byte into usb buffer */
 void usb_setbyte(uint8_t byte)
 {
     uint8_t* wr_pos = usb_wr + 1;
@@ -203,33 +212,94 @@ void usb_setbyte(uint8_t byte)
     usb_wr = wr_pos;
 }
 
-void usb_send_byte(uint8_t *buf, int count)
+/* Send buffer via usb serial port */
+void usb_send_bytes(uint8_t *buf, int count)
 {
-  // loop over all mounted interfaces
-  for(uint8_t idx=0; idx<CFG_TUH_CDC; idx++)
-  {
-    if ( tuh_cdc_mounted(idx) )
+    /* Assumes one CDC interface */
+    if (tuh_cdc_mounted(0) && count)
     {
-      // console --> cdc interfaces
-      if (count)
-      {
 #ifdef DEBUG
-    printf("usb_write: %d, %d\r\n", idx, count);
+        printf("usb_write: %d, %d\r\n", idx, count);
 #endif
-        tuh_cdc_write(idx, buf, count);
-        tuh_cdc_write_flush(idx);
-      }
+        tuh_cdc_write(0, buf, count);
+        tuh_cdc_write_flush(0);
     }
+}
+
+/*************************************************************
+ * USB Serial routines                                       *
+ *************************************************************/
+
+/* Callback when data available on USB */
+/* Some weirdness here as FULL_SPEED devices should only send 64 bytes at a time,
+ * but the Duo sends 512 byte packets and we need to receive the full 512 to make tinyusb happy */
+void tuh_cdc_rx_cb(uint8_t idx)
+{
+    static uint8_t buf[512];
+#ifdef DEBUG
+    //printf("*");
+#endif
+    uint32_t count = tuh_cdc_read(idx, buf, sizeof(buf));
+#ifdef PERF
+    for (int i = 0 ; i < count ; i++)
+    {
+        usb_setbyte(buf[i]);
+    }
+#endif
+}
+
+/* Callback when USB Serial device is connected */
+void tuh_cdc_mount_cb(uint8_t idx)
+{
+  tuh_cdc_itf_info_t itf_info = { 0 };
+  tuh_cdc_itf_get_info(idx, &itf_info);
+
+  printf("CDC Interface is mounted: address = %u, itf_num = %u\r\n", itf_info.daddr, itf_info.bInterfaceNumber);
+
+#ifdef CFG_TUH_CDC_LINE_CODING_ON_ENUM
+  // CFG_TUH_CDC_LINE_CODING_ON_ENUM must be defined for line coding is set by tinyusb in enumeration
+  cdc_line_coding_t line_coding = { 0 };
+  if ( tuh_cdc_get_local_line_coding(idx, &line_coding) )
+  {
+    printf("  Baudrate: %lu, Stop Bits : %u\r\n", line_coding.bit_rate, line_coding.stop_bits);
+    printf("  Parity  : %u, Data Width: %u\r\n", line_coding.parity  , line_coding.data_bits);
   }
+#endif
+}
+
+/* Callback wheb USB Serial device is unmounted */
+void tuh_cdc_umount_cb(uint8_t idx)
+{
+  tuh_cdc_itf_info_t itf_info = { 0 };
+  tuh_cdc_itf_get_info(idx, &itf_info);
+
+  printf("CDC Interface is unmounted: address = %u, itf_num = %u\r\n", itf_info.daddr, itf_info.bInterfaceNumber);
+}
+
+/* Callback when a USB device is mounted */
+void tuh_mount_cb(uint8_t dev_addr)
+{
+  printf("A device with address %d is mounted\r\n", dev_addr);
+}
+
+/* Callback when a USB device is unmounted */
+void tuh_umount_cb(uint8_t dev_addr)
+{
+  printf("A device with address %d is unmounted \r\n", dev_addr);
 }
 
 
+/*************************************************************
+ * Video Rendering Routines                                  *
+ *************************************************************/
+
 /*
- * The current video mode, set by DAZ_CTRLPIC
+ * Renders a line of video. (Runs as dedicated loop on second core)
+ * 
+ * Uses the COMPOSABLE_RAW_RUN rendering method, which has the byte format
+ * COMPOSABLE_RAW_RUN | colour0 | num 32 bit words | colour1 .... colour n | COMPOSABLE_EOL_ALIGN
+ * Colours from the line being processed are copied from the frame_buffer into the scan line
  */
-enum { mode_32x32c, mode_64x64m, mode_64x64c, mode_128x128m } video_mode = mode_128x128m;
-
-
 void __time_critical_func(render_loop) (void)
 {
 #ifdef DEBUG
@@ -237,26 +307,33 @@ void __time_critical_func(render_loop) (void)
 #endif
     while(true)
     {
-        struct scanvideo_scanline_buffer *buffer = scanvideo_begin_scanline_generation (true);
+        /* Wait for ready to render next scanline */
+        struct scanvideo_scanline_buffer *buffer = scanvideo_begin_scanline_generation(true);
         int scanline = scanvideo_scanline_number (buffer->scanline_id);
         uint32_t *vga_buf = buffer->data + 1;
         uint16_t *frame_buf = &frame_buffer[scanline * WIDTH];
 
+        /* Copy colours from framebuffer into scanline buffer */
         memcpy(vga_buf, frame_buf, WIDTH * 2);
         /* TODO: can just make this vga_buf[WIDTH/2] */
         vga_buf += WIDTH/2;
         *vga_buf = COMPOSABLE_EOL_ALIGN << 16;
 
+        /* Set the "header" bytes for the scanline */
         vga_buf = buffer->data;
         vga_buf[0] = (vga_buf[1] << 16) | COMPOSABLE_RAW_RUN;
         vga_buf[1] = (vga_buf[1] & 0xFFFF0000) | (WIDTH - 2);
         buffer->data_used = (WIDTH + 4) / 2;
+
+        /* render video scanline */
         scanvideo_end_scanline_generation (buffer);
-        /* poll joysticks once per frame */
-//        schedule_joy_input();
     }
 }
 
+/* Set up the video mode 
+ * 1024x768 mode requires system clock to be set at 130MHz
+ * which is done at start of main()
+ */
 void setup_video(void)
 {
     scanvideo_setup(&vga_mode_128x128);
@@ -266,8 +343,22 @@ void setup_video(void)
 #endif
 }
 
+/* Start running video on core 1*/
+void core1_main()
+{
+    setup_video();
+    render_loop();
+}
+
+
+/*************************************************************
+ * Framebuffer manipulation routines                         *
+ *************************************************************/
+
 /*
- * Set a pixel in x4 mode (128x128)
+ * The following routines set a pixel into the frame_buffer at different resolutions.
+ * AThe framebuffer is kept at a fixed 128x128 resolutions, and lower resolutions set
+ * multiple pixels for this resolution.
  */
 void set_pixel_128(int x, int y, int colour)
 {
@@ -328,12 +419,146 @@ void set_pixel_32(int x, int y, int colour)
     }
 }
 
-void core1_main()
+
+/* Set a pixel into frame_buffer and raw_frame 
+ * If called with refresh=true, only set frame_buffer
+ * refresh mode is used when video mode changes to set the
+ * frame buffer from the current raw_frame contents */
+void set_vram(int addr, uint8_t value, bool refresh)
 {
-    setup_video();
-    render_loop();
+#ifndef PERF
+    return;
+#endif
+#ifdef DEBUG2
+    printf ("set_vram(%d,%x, %d)\n", addr, value, refresh);
+#endif
+    /* raw_frame stores a copy of the Dazzler video ram. 
+     * When setting ram values, copy into the raw_frame and vga framebuffer
+     * refresh is set when refreshing vga framebuffer from raw_frame. So don't need to set
+     * raw_frame in that case
+     */
+    if (!refresh)
+        raw_frame[addr] = value;
+
+    int x, y;
+
+    /* For monochrome modes, foreground colour comes from the picture control message */
+    uint8_t mono_clr = dazzler_picture_ctrl & 0x0F;
+    switch(video_mode)
+    {
+        case mode_128x128m:
+        {
+            /* In this mode each byte contains 8 individual on/off pixels*/
+            /* this also needs to do the different addressing for each quater of the screen */
+            if (addr < 512)             /* First quadrant */
+            {
+                y = addr / 16 * 2;
+                x = (addr * 4) % 64;
+           } 
+            else if (addr < 1024)
+            {
+                y = (addr - 512) / 16 * 2;
+                x = (((addr - 512) * 4) % 64) + 64;
+            }
+            else if (addr < 1536)
+            {
+                y = (addr - 1024) / 16 * 2 + 64;
+                x = ((addr - 1024) * 4) % 64;
+            }
+            else
+            {
+                y = (addr - 1536) / 16 * 2 + 64;
+                x = (((addr - 1536) * 4) % 64) + 64;
+            }
+
+            /* If bit is set, set pixel to foreground colour, otherwise set to black */
+            /* Pixel layout is as follows (wher e D0 is bit 0):
+             * | D0 | D1 | D4 | D5 |
+             * | D2 | D3 | D6 | D7 | 
+             */
+            set_pixel_128(x, y, (value & 0x01) ? mono_clr : 0);
+            set_pixel_128(x + 1, y, (value & 0x02) ? mono_clr : 0);
+            set_pixel_128(x, y + 1, (value & 0x04) ? mono_clr : 0);
+            set_pixel_128(x + 1, y + 1, (value & 0x08) ? mono_clr : 0);
+            set_pixel_128(x + 2, y, (value & 0x10) ? mono_clr : 0);
+            set_pixel_128(x + 3, y, (value & 0x20) ? mono_clr : 0);
+            set_pixel_128(x + 2, y + 1, (value & 0x40) ? mono_clr : 0);
+            set_pixel_128(x + 3, y + 1, (value & 0x80) ? mono_clr : 0);
+            break;
+        }
+        case mode_64x64m:
+        {
+            y = addr / 16 * 2;
+            x = (addr * 4) % 64;
+
+            /* If bit is set, set pixel to foreground colour, otherwise set to black */
+            /* Pixel layout is the same as 128x128m mode */
+            set_pixel_64(x, y, (value & 0x01) ? mono_clr : 0);
+            set_pixel_64(x + 1, y, (value & 0x02) ? mono_clr : 0);
+            set_pixel_64(x, y + 1, (value & 0x04) ? mono_clr : 0);
+            set_pixel_64(x + 1, y + 1, (value & 0x08) ? mono_clr : 0);
+            set_pixel_64(x + 2, y, (value & 0x10) ? mono_clr : 0);
+            set_pixel_64(x + 3, y, (value & 0x20) ? mono_clr : 0);
+            set_pixel_64(x + 2, y + 1, (value & 0x40) ? mono_clr : 0);
+            set_pixel_64(x + 3, y + 1, (value & 0x80) ? mono_clr : 0);
+            break;        
+        }
+        case mode_64x64c:
+        {
+            if (addr < 512) /* First quadrant */
+            {
+                y = addr * 2 / 32;
+                x = addr * 2 % 32;
+            } 
+            else if (addr < 1024)
+            {
+                y = (addr - 512) * 2 / 32;
+                x = ((addr - 512) * 2 % 32) + 32;
+            }
+            else if (addr < 1536)
+            {
+                y = ((addr - 1024) * 2 / 32) + 32;
+                x = (addr - 1024) * 2 % 32;
+            }
+            else
+            {
+                y = ((addr - 1536) * 2 / 32) + 32;
+                x = ((addr - 1536) * 2 % 32) + 32;
+            }
+            /* Each byte contains 2 pixels */
+            set_pixel_64(x + 0, y, value & 0x0F);
+            set_pixel_64(x + 1, y, value >> 4);
+            break;
+        }
+        case mode_32x32c:
+        {
+            int y = addr * 2 / 32;
+            int x = (addr * 2) % 32;
+            /* Each byte contains 2 pixels */
+            set_pixel_32(x + 0, y, value & 0x0F);
+            set_pixel_32(x + 1, y, value >> 4);
+            break;
+        }
+    }
 }
 
+/* Used when chaning video modes to copy from raw_frame into frame_buffer with the new mode */
+void refresh_vram()
+{
+    for (int i = 0 ; i < 2048 ; i++)
+    {
+        set_vram(i, raw_frame[i], false);
+    }
+}
+
+
+/*************************************************************
+ * Main processing loop for USB                              *
+ *************************************************************/
+
+/*
+ * Process commands coming from the Altair-duino via the USB serial interface
+ */
 void process_usb_commands()
 {
     const uint LED_PIN = PICO_DEFAULT_LED_PIN;
@@ -342,46 +567,34 @@ void process_usb_commands()
     int led_status = 0;
 
     absolute_time_t abs_time = get_absolute_time();
-    /* poll joystick every 100 ms-ish*/
-    absolute_time_t joy_poll_time = make_timeout_time_ms(50);
+    /* poll joystick ~60 times per second */
+    absolute_time_t joy_poll_time = make_timeout_time_ms(JOY_POLL_MS);
 
-
-#if 0
-    while (true)
-    {
-        int c = getchar();
-
-        absolute_time_t abs_time = get_absolute_time();
-        led_status = (to_ms_since_boot(abs_time) / 50) % 2;
-        gpio_put(LED_PIN, led_status);
- 
-    }
-#endif
     uint8_t c = 0;
     while (true)
     {
         abs_time = get_absolute_time();
 
+        /*
+         * If nothing available on USB, then schedule request to poll joysticks
+         * and service USB tasks.
+         */
         if (!usb_avail())
         {
             if (abs_time >= joy_poll_time)
             {
                 schedule_joy_input();
-                joy_poll_time = make_timeout_time_ms(50);
+                joy_poll_time = make_timeout_time_ms(JOY_POLL_MS);
             }
        	    tuh_task();
             continue;
         }
+        /* Otherwise service the USB serial */
         c = usb_getbyte();
-//        set_vram(16,0x1f,false);
-#ifdef DEBUG
-    printf(".");
-#endif
-//        putchar(c);
-//    	continue;
    
-        led_status = (to_ms_since_boot(abs_time) / 50) % 2;
-        gpio_put(LED_PIN, led_status);
+        /* TODO: Implement LED flashing algo */
+//        led_status = (to_ms_since_boot(abs_time) / 50) % 2;
+//        gpio_put(LED_PIN, led_status);
 
         switch (c & 0xF0)
         {
@@ -394,7 +607,11 @@ void process_usb_commands()
                 buf[0] = DAZ_VERSION | (DAZZLER_VERSION & 0x0F);
                 buf[1] = FEAT_VIDEO | FEAT_FRAMEBUF | FEAT_JOYSTICK;
                 buf[2] = 0;
-                usb_send_byte(buf, 3);
+                usb_send_bytes(buf, 3);
+#ifndef PERF
+    while(1) tuh_task();
+#endif
+
                 break;
             }
             case DAZ_CTRL:
@@ -520,125 +737,6 @@ void process_usb_commands()
     }
 }
 
-/* TODO: No longer used due to loop unrolling */
-// uint8_t bit_masks[8] = { 0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01 };
-
-void set_vram(int addr, uint8_t value, bool refresh)
-{
-#ifdef DEBUG2
-    printf ("set_vram(%d,%x, %d)\n", addr, value, refresh);
-#endif
-    /* raw_frame stores a copy of the Dazzler video ram. 
-     * When setting ram values, copy into the raw_frame and vga framebuffer
-     * refresh is set when refreshing vga framebuffer from raw_frame. So don't need to set
-     * raw_frame in that case
-     */
-    if (!refresh)
-        raw_frame[addr] = value;
-
-    int x, y;
-
-    /* For monochrome modes, foreground colour comes from the picture control message */
-    uint8_t mono_clr = dazzler_picture_ctrl & 0x0F;
-    switch(video_mode)
-    {
-        case mode_128x128m:
-        {
-            /* In this mode each byte contains 8 individual on/off pixels*/
-            /* this also needs to do the different addressing for each quater of the screen */
-            if (addr < 512)             /* First quadrant */
-            {
-                y = addr / 16 * 2;
-                x = (addr * 4) % 64;
-           } 
-            else if (addr < 1024)
-            {
-                y = (addr - 512) / 16 * 2;
-                x = (((addr - 512) * 4) % 64) + 64;
-            }
-            else if (addr < 1536)
-            {
-                y = (addr - 1024) / 16 * 2 + 64;
-                x = ((addr - 1024) * 4) % 64;
-            }
-            else
-            {
-                y = (addr - 1536) / 16 * 2 + 64;
-                x = (((addr - 1536) * 4) % 64) + 64;
-            }
-
-            /* If bit is set, set pixel to foreground colour, otherwise set to black */
-            set_pixel_128(x, y, (value & 0x01) ? mono_clr : 0);
-            set_pixel_128(x + 1, y, (value & 0x02) ? mono_clr : 0);
-            set_pixel_128(x, y + 1, (value & 0x04) ? mono_clr : 0);
-            set_pixel_128(x + 1, y + 1, (value & 0x08) ? mono_clr : 0);
-            set_pixel_128(x + 2, y, (value & 0x10) ? mono_clr : 0);
-            set_pixel_128(x + 3, y, (value & 0x20) ? mono_clr : 0);
-            set_pixel_128(x + 2, y + 1, (value & 0x40) ? mono_clr : 0);
-            set_pixel_128(x + 3, y + 1, (value & 0x80) ? mono_clr : 0);
-            break;
-        }
-        case mode_64x64m:
-        {
-            y = addr / 16 * 2;
-            x = (addr * 4) % 64;
-
-            /* If bit is set, set pixel to foreground colour, otherwise set to black */
-            set_pixel_64(x, y, (value & 0x01) ? mono_clr : 0);
-            set_pixel_64(x + 1, y, (value & 0x02) ? mono_clr : 0);
-            set_pixel_64(x, y + 1, (value & 0x04) ? mono_clr : 0);
-            set_pixel_64(x + 1, y + 1, (value & 0x08) ? mono_clr : 0);
-            set_pixel_64(x + 2, y, (value & 0x10) ? mono_clr : 0);
-            set_pixel_64(x + 3, y, (value & 0x20) ? mono_clr : 0);
-            set_pixel_64(x + 2, y + 1, (value & 0x40) ? mono_clr : 0);
-            set_pixel_64(x + 3, y + 1, (value & 0x80) ? mono_clr : 0);
-            break;        
-        }
-        case mode_64x64c:
-        {
-            if (addr < 512) /* First quadrant */
-            {
-                y = addr * 2 / 32;
-                x = addr * 2 % 32;
-            } 
-            else if (addr < 1024)
-            {
-                y = (addr - 512) * 2 / 32;
-                x = ((addr - 512) * 2 % 32) + 32;
-            }
-            else if (addr < 1536)
-            {
-                y = ((addr - 1024) * 2 / 32) + 32;
-                x = (addr - 1024) * 2 % 32;
-            }
-            else
-            {
-                y = ((addr - 1536) * 2 / 32) + 32;
-                x = ((addr - 1536) * 2 % 32) + 32;
-            }
-
-            set_pixel_64(x + 0, y, value & 0x0F);
-            set_pixel_64(x + 1, y, value >> 4);
-            break;
-        }
-        case mode_32x32c:
-        {
-            int y = addr * 2 / 32;
-            int x = (addr * 2) % 32;
-            set_pixel_32(x + 0, y, value & 0x0F);
-            set_pixel_32(x + 1, y, value >> 4);
-            break;
-        }
-    }
-}
-
-void refresh_vram()
-{
-    for (int i = 0 ; i < 2048 ; i++)
-    {
-        set_vram(i, raw_frame[i], false);
-    }
-}
 
 int main(void)
 {
@@ -656,15 +754,6 @@ int main(void)
     int led_status = 1;
 
     gpio_put(LED_PIN, led_status);
-#if 0
-while(1)
-{
-        gpio_put(LED_PIN, led_status);
-	led_status = ! led_status;
-	printf("Hello\r\n");
-	sleep_ms(1000);
-}
-#endif
     memset(frame_buffer, 0, sizeof(frame_buffer));
 
     int clr = 0;
@@ -675,72 +764,7 @@ while(1)
     printf("processing serial commands\n");
 #endif
 
-//dazzler_picture_ctrl = 0b01011100; // 64m
-//dazzler_picture_ctrl = 0b00110000; // 64c
-//video_mode = mode_64x64c;
-#if 0
-for (int addr = 0 ; addr < 2048 ; addr++)
-{
-    set_vram(addr, 0x0cc, false);
-}
-#endif
-//    set_vram(16,0xff,false);
     printf("READY\n");
     process_usb_commands();
-//    while(true){ tuh_task(); }
 }
 
-void tuh_cdc_rx_cb(uint8_t idx)
-{
-    static uint8_t buf[512]; // +1 for extra null character
-#ifdef DEBUG
-    //printf("*");
-#endif
-    // forward cdc interfaces -> console
-    uint32_t count = tuh_cdc_read(idx, buf, sizeof(buf));
- //   printf("rx: %d, count = %d\r\n", idx, count);
-    for (int i = 0 ; i < count ; i++)
-    {
-        usb_setbyte(buf[i]);
-    }
-}
-
-void tuh_cdc_mount_cb(uint8_t idx)
-{
-  tuh_cdc_itf_info_t itf_info = { 0 };
-  tuh_cdc_itf_get_info(idx, &itf_info);
-
-  printf("CDC Interface is mounted: address = %u, itf_num = %u\r\n", itf_info.daddr, itf_info.bInterfaceNumber);
-
-#ifdef CFG_TUH_CDC_LINE_CODING_ON_ENUM
-  // CFG_TUH_CDC_LINE_CODING_ON_ENUM must be defined for line coding is set by tinyusb in enumeration
-  // otherwise you need to call tuh_cdc_set_line_coding() first
-  cdc_line_coding_t line_coding = { 0 };
-  if ( tuh_cdc_get_local_line_coding(idx, &line_coding) )
-  {
-    printf("  Baudrate: %lu, Stop Bits : %u\r\n", line_coding.bit_rate, line_coding.stop_bits);
-    printf("  Parity  : %u, Data Width: %u\r\n", line_coding.parity  , line_coding.data_bits);
-  }
-#endif
-}
-
-void tuh_cdc_umount_cb(uint8_t idx)
-{
-  tuh_cdc_itf_info_t itf_info = { 0 };
-  tuh_cdc_itf_get_info(idx, &itf_info);
-
-  printf("CDC Interface is unmounted: address = %u, itf_num = %u\r\n", itf_info.daddr, itf_info.bInterfaceNumber);
-}
-
-
-void tuh_mount_cb(uint8_t dev_addr)
-{
-  // application set-up
-  printf("A device with address %d is mounted\r\n", dev_addr);
-}
-
-void tuh_umount_cb(uint8_t dev_addr)
-{
-  // application tear-down
-  printf("A device with address %d is unmounted \r\n", dev_addr);
-}
