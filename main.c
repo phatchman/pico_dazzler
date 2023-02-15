@@ -11,6 +11,7 @@
 #include "hardware/clocks.h"
 
 #include "usb_joystick.h"
+#include "daz_audio.h"
 
 /* TODOS:
  */
@@ -240,7 +241,7 @@ void tuh_cdc_rx_cb(uint8_t idx)
     //printf("*");
 #endif
     uint32_t count = tuh_cdc_read(idx, buf, sizeof(buf));
-#ifdef PERF
+#ifndef PERF
     for (int i = 0 ; i < count ; i++)
     {
         usb_setbyte(buf[i]);
@@ -279,6 +280,12 @@ void tuh_cdc_umount_cb(uint8_t idx)
 /* Callback when a USB device is mounted */
 void tuh_mount_cb(uint8_t dev_addr)
 {
+#if 0
+    int result = tuh_hid_receive_report(dev_addr, 0);
+#ifndef DEBUG
+            printf("tuh_hid_receive_report(%d, %d) = %d\n", dev_addr, 0, result);
+#endif
+#endif
   printf("A device with address %d is mounted\r\n", dev_addr);
 }
 
@@ -300,11 +307,13 @@ void tuh_umount_cb(uint8_t dev_addr)
  * COMPOSABLE_RAW_RUN | colour0 | num 32 bit words | colour1 .... colour n | COMPOSABLE_EOL_ALIGN
  * Colours from the line being processed are copied from the frame_buffer into the scan line
  */
+volatile bool send_vsync = false;
 void __time_critical_func(render_loop) (void)
 {
 #ifdef DEBUG
     printf ("Starting render\n");
 #endif
+    absolute_time_t abs_time = get_absolute_time();
     while(true)
     {
         /* Wait for ready to render next scanline */
@@ -426,7 +435,7 @@ void set_pixel_32(int x, int y, int colour)
  * frame buffer from the current raw_frame contents */
 void set_vram(int addr, uint8_t value, bool refresh)
 {
-#ifndef PERF
+#ifdef PERF
     return;
 #endif
 #ifdef DEBUG2
@@ -569,6 +578,7 @@ void process_usb_commands()
     absolute_time_t abs_time = get_absolute_time();
     /* poll joystick ~60 times per second */
     absolute_time_t joy_poll_time = make_timeout_time_ms(JOY_POLL_MS);
+    absolute_time_t print_refresh_rate = make_timeout_time_ms(500);
 
     uint8_t c = 0;
     while (true)
@@ -605,10 +615,10 @@ void process_usb_commands()
 #endif
                 static uint8_t buf[3];
                 buf[0] = DAZ_VERSION | (DAZZLER_VERSION & 0x0F);
-                buf[1] = FEAT_VIDEO | FEAT_FRAMEBUF | FEAT_JOYSTICK;
+                buf[1] = FEAT_VIDEO | FEAT_FRAMEBUF | FEAT_JOYSTICK | FEAT_DAC;
                 buf[2] = 0;
                 usb_send_bytes(buf, 3);
-#ifndef PERF
+#ifdef PERF
     while(1) tuh_task();
 #endif
 
@@ -733,6 +743,17 @@ void process_usb_commands()
 #endif
                 break;
             }
+            case DAZ_DAC:
+            {
+                uint8_t channel = (c & 0x0f) == 0 ? 0: 1;
+                uint16_t delay_us = usb_getbyte_blocking() | (usb_getbyte_blocking() << 8); // Endian check?
+                uint8_t sample = usb_getbyte_blocking();
+                audio_add_sample(channel, delay_us, sample); 
+#ifdef DEBUG
+                printf("DAC: %d, %d, %x\n", channel, delay_us, sample);
+#endif
+                break;
+            }
         }
     }
 }
@@ -744,8 +765,11 @@ int main(void)
  
     set_sys_clock_khz(130000, true);
 
-    stdio_init_all();
     board_init();
+    stdio_init_all();
+    printf("Start audio init\n");
+    audio_init();
+    printf("End audio init\n");
     tuh_init(BOARD_TUH_RHPORT);
 
     const uint LED_PIN = PICO_DEFAULT_LED_PIN;
@@ -755,13 +779,30 @@ int main(void)
 
     gpio_put(LED_PIN, led_status);
     memset(frame_buffer, 0, sizeof(frame_buffer));
-
     int clr = 0;
     sleep_ms(1000);
     
     multicore_launch_core1(core1_main);
 #ifdef DEBUG
     printf("processing serial commands\n");
+#endif
+#ifdef AUDIO_TEST
+    int timeout = 2336;
+    absolute_time_t sample_time = make_timeout_time_us(timeout);
+    int samples[2] = { 0x7f, 0x81 };
+    int sample_nr = 0;
+    while (true) {
+        for (int i = 0 ; i < 500 ; i++)
+        {
+            absolute_time_t abs_time = get_absolute_time();        
+            if(abs_time > sample_time)
+            {
+                audio_add_sample(0, 50, samples[sample_nr]);
+                sample_nr ^= 1;
+                sample_time = make_timeout_time_us(timeout);
+            }
+        }
+    }
 #endif
 
     printf("READY\n");
