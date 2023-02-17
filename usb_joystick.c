@@ -8,6 +8,8 @@
 #define DAZ_JOY2      0x20
 #define DAZ_KEY       0x30
 
+//#define DEBUG
+//#define DEBUG0
 /* Support 2 joysticks */
 static usb_joystick joysticks[2];
 
@@ -154,7 +156,7 @@ void schedule_joy_input()
         if (joysticks[i].connected)
         {
             bool result = tuh_hid_receive_report(joysticks[i].dev_addr, joysticks[i].instance);
-#ifdef DEBUG
+#ifdef DEBUG0
             printf("tuh_hid_receive_report(%d, %d) = %d\n", joysticks[i].dev_addr, joysticks[i].instance, result);
 #endif
         }
@@ -202,7 +204,7 @@ void process_joy_input(int joynum, usb_joystick* joy)
     daz_msg[2] = get_joy_value_y(joy->y);
     
  //   printf ("Sending joystick report\r\n");
-#ifdef DEBUGXXX
+#ifdef DEBUG
     printf("Joy = %d, X = %d, Y = %d, btn = %x, msg[0] = %02x\r\n", joynum, (int8_t) daz_msg[1], (int8_t) daz_msg[2], daz_msg[0] & 0x0F, daz_msg[0]);
 #endif
     usb_send_bytes(daz_msg, 3);
