@@ -30,7 +30,7 @@
 
 #define JOY_POLL_MS   16 /* Poll the joysticks ~ 60 times per second */
 
-//#define DEBUG
+//#define DEBUG 
 //#define DEBUG0
 
 /* Dazzler packet types */
@@ -44,7 +44,7 @@
 #define DAZ_JOY1      0x10
 #define DAZ_JOY2      0x20
 #define DAZ_KEY       0x30
-
+#define DAZ_VSYNC     0x40
 
 #define FEAT_VIDEO    0x01
 #define FEAT_JOYSTICK 0x02
@@ -339,6 +339,20 @@ void __time_critical_func(render_loop) (void)
     }
 }
 
+/* Handle VSYNC */
+const uint VSYNC_PIN = PICO_SCANVIDEO_COLOR_PIN_BASE + PICO_SCANVIDEO_COLOR_PIN_COUNT + 1;
+void vga_irq_handler() {
+    int vsync_current_level = gpio_get(VSYNC_PIN);
+
+    // Note v_sync_polarity == 1 means active-low
+    if (vsync_current_level != scanvideo_get_mode().default_timing->v_sync_polarity) 
+    {
+        send_vsync = true;
+    }
+    gpio_acknowledge_irq(VSYNC_PIN, vsync_current_level ? GPIO_IRQ_EDGE_RISE : GPIO_IRQ_EDGE_FALL);
+}
+
+
 /* Set up the video mode 
  * 1024x768 mode requires system clock to be set at 130MHz
  * which is done at start of main()
@@ -347,16 +361,13 @@ void setup_video(void)
 {
     scanvideo_setup(&vga_mode_128x128);
     scanvideo_timing_enable(true);
+    gpio_set_irq_enabled(VSYNC_PIN, GPIO_IRQ_EDGE_FALL, true);
+    irq_set_exclusive_handler(IO_IRQ_BANK0, vga_irq_handler);
+    irq_set_enabled(IO_IRQ_BANK0, true);
+
 #ifdef DEBUG
     printf ("System clock speed %d kHz\n", clock_get_hz (clk_sys) / 1000);
 #endif
-}
-
-/* Start running video on core 1*/
-void core1_main()
-{
-    setup_video();
-    render_loop();
 }
 
 
@@ -578,7 +589,6 @@ void process_usb_commands()
     absolute_time_t abs_time = get_absolute_time();
     /* poll joystick ~60 times per second */
     absolute_time_t joy_poll_time = make_timeout_time_ms(JOY_POLL_MS);
-    absolute_time_t print_refresh_rate = make_timeout_time_ms(500);
 
     uint8_t c = 0;
     while (true)
@@ -591,7 +601,13 @@ void process_usb_commands()
          */
         if (!usb_avail())
         {
-            if (abs_time >= joy_poll_time)
+            if (send_vsync)
+            {
+                static uint8_t vsync = DAZ_VSYNC;
+                usb_send_bytes(&vsync, 1);
+                send_vsync = false;
+            }
+            if (absolute_time_diff_us(joy_poll_time, abs_time) >= 0)
             {
                 schedule_joy_input();
                 joy_poll_time = make_timeout_time_ms(JOY_POLL_MS);
@@ -615,7 +631,7 @@ void process_usb_commands()
 #endif
                 static uint8_t buf[3];
                 buf[0] = DAZ_VERSION | (DAZZLER_VERSION & 0x0F);
-                buf[1] = FEAT_VIDEO | FEAT_FRAMEBUF | FEAT_JOYSTICK | FEAT_DAC;
+                buf[1] = FEAT_VIDEO | FEAT_FRAMEBUF | FEAT_JOYSTICK | FEAT_DAC | FEAT_VSYNC;
                 buf[2] = 0;
                 usb_send_bytes(buf, 3);
 #ifdef PERF
@@ -758,6 +774,13 @@ void process_usb_commands()
     }
 }
 
+/* Start running video on core 1*/
+void core1_main()
+{
+    setup_video();
+    render_loop();
+}
+
 
 int main(void)
 {
@@ -767,11 +790,8 @@ int main(void)
 
     board_init();
     stdio_init_all();
-    printf("Start audio init\n");
-    audio_init();
-    printf("End audio init\n");
     tuh_init(BOARD_TUH_RHPORT);
-
+    audio_init();
     const uint LED_PIN = PICO_DEFAULT_LED_PIN;
     gpio_init(LED_PIN);
     gpio_set_dir(LED_PIN, GPIO_OUT);
@@ -795,7 +815,7 @@ int main(void)
         for (int i = 0 ; i < 500 ; i++)
         {
             absolute_time_t abs_time = get_absolute_time();        
-            if(abs_time > sample_time)
+            if(absolute_time_diff_us(sample_time, abs_time) >= 0)
             {
                 audio_add_sample(0, 50, samples[sample_nr]);
                 sample_nr ^= 1;

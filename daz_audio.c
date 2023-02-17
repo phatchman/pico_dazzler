@@ -16,19 +16,17 @@
 
 #define audio_pio __CONCAT(pio, PICO_AUDIO_I2S_PIO)
 bi_decl(bi_3pins_with_names(PICO_AUDIO_I2S_DATA_PIN, "I2S DIN", PICO_AUDIO_I2S_CLOCK_PIN_BASE, "I2S BCK", PICO_AUDIO_I2S_CLOCK_PIN_BASE+1, "I2S LRCK"));
-
-struct audio_buffer_pool *producer_pool = 0;
-static absolute_time_t audio_delay_time = 0;
-static queue_t audio_queue;
-static repeating_timer_t audio_timer;
-static volatile uint32_t current_audio_sample = 0;
-
 bool play_audio_sample_cb(struct repeating_timer *t);
 
+static volatile uint32_t current_audio_sample = 0;
+static struct audio_buffer_pool *producer_pool = 0;
+static alarm_pool_t *audio_alarm_pool = 0;
+
 void audio_init() {
+    static repeating_timer_t audio_timer;
 
     static audio_format_t audio_format = {
-            .format = AUDIO_BUFFER_FORMAT_PCM_U16,
+            .format = AUDIO_BUFFER_FORMAT_PCM_S16,
             .sample_freq = 48000,
             .channel_count = 2,
     };
@@ -59,32 +57,18 @@ void audio_init() {
     ok = audio_i2s_connect(producer_pool);
     assert(ok);
     audio_i2s_set_enabled(true);
+    audio_alarm_pool = alarm_pool_create(2, 2);
 
-    queue_init(&audio_queue, 4, 32);
 //    add_repeating_timer_us(-21, play_audio_sample_cb, NULL, &audio_timer);
-    add_repeating_timer_us(-20, play_audio_sample_cb, NULL, &audio_timer);
+//    alarm_pool_add_repeating_timer_us(audio_alarm_pool,-20, play_audio_sample_cb, NULL, &audio_timer);
+    sleep_ms(100);
+    alarm_pool_add_repeating_timer_us(audio_alarm_pool,-20, play_audio_sample_cb, NULL, &audio_timer);
 }
 
 
 bool play_audio_sample_cb(struct repeating_timer *t) {
 //    printf("Play: %X\n", current_audio_sample);
     pio_sm_put(audio_pio, 3, current_audio_sample);
-    return true;
-
-    int on = true;
-    static absolute_time_t timer = 0;
-    if (timer == 0)
-    {
-        timer = make_timeout_time_us(10000);
-    }
-    if (get_absolute_time() > timer)
-    {
-        pio_sm_put(audio_pio, 3, current_audio_sample);
-    }
-    else
-    {
-        pio_sm_put(audio_pio, 3, 0);  
-    }
     return true;
 }
 
@@ -123,15 +107,12 @@ int main() {
     int samples[2] = { 0x7f, 0x81 };
     int sample_nr = 0;
     while (true) {
-        for (int i = 0 ; i < 500 ; i++)
+        absolute_time_t abs_time = get_absolute_time();        
+        if(absolute_time_diff_us(abs_time, sample_time) <= 0)
         {
-            absolute_time_t abs_time = get_absolute_time();        
-            if(abs_time > sample_time)
-            {
-                audio_add_sample(0, 50, samples[sample_nr]);
-                sample_nr ^= 1;
-                sample_time = make_timeout_time_us(timeout);
-            }
+            audio_add_sample(0, 50, samples[sample_nr]);
+            sample_nr ^= 1;
+            sample_time = make_timeout_time_us(timeout);
         }
     }
     return 0;

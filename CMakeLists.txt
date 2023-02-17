@@ -66,6 +66,5 @@ else()
   target_link_libraries(daz_audio PRIVATE
     pico_stdlib
     pico_audio_i2s
-    pico_scanvideo_dpi
   )
 endif()
