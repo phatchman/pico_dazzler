@@ -1,4 +1,34 @@
-/* USB Host includes */
+
+/*****************************************************************************
+ * PICO DAZZLER
+ *
+ * Cromemco Dazzler emulation using Raspberry Pi PICO
+ * 
+ *****************************************************************************/
+/*
+ * MIT License
+ *
+ * Copyright (c) 2023 Paul Hatchman
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
 
 #include "bsp/board.h"
 #include "tusb.h"
@@ -13,9 +43,6 @@
 #include "usb_joystick.h"
 #include "daz_audio.h"
 
-/* TODOS:
- */
-
 #include <string.h>
 #include <stdio.h>
 
@@ -28,7 +55,7 @@
 #define HEIGHT  128
 #define NUMCLR  16
 
-#define JOY_POLL_MS   16 /* Poll the joysticks ~ 60 times per second */
+#define JOY_POLL_MS   16    /* Poll the joysticks ~ 60 times per second */
 
 //#define DEBUG 
 //#define DEBUG0
