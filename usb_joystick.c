@@ -138,33 +138,69 @@ void tuh_hid_umount_cb(uint8_t dev_addr, uint8_t instance)
 void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* report, uint16_t len)
 {
 //    printf("tuh_hid_report_received_cb\n");
+    static absolute_time_t swap_time;
+    static int swapping_joy = -1;   /* Joystick no that is initiating swap */
+    static bool swapped = false;    /* True if swapped, but buttons not yet released */
     for (int i = 0 ; i < 2 ; i++)
     {
-
-      /* check if joystick is connected and values have changed since last report */
-      if(joysticks[i].dev_addr == dev_addr &&
-         joysticks[i].instance == instance &&
-         joysticks[i].connected &&
-        /* If there are multiple report types, the reportid is assumed to be the first byte */
-         (!joysticks[i].offsets.has_report_id || joysticks[i].offsets.report_id == report[0]) &&
-         (joysticks[i].prev_x != report[joysticks[i].offsets.x_axis_byte] ||
-         joysticks[i].prev_y != report[joysticks[i].offsets.y_axis_byte] ||
-         joysticks[i].prev_buttons != report[joysticks[i].offsets.buttons_byte]))
-      {
-          joysticks[i].x = report[joysticks[i].offsets.x_axis_byte];
-          joysticks[i].y = report[joysticks[i].offsets.y_axis_byte];
-          uint8_t buttons = report[joysticks[i].offsets.buttons_byte];
-          joysticks[i].buttons = buttons;
-          joysticks[i].b1 = buttons & joysticks[i].offsets.b1_mask;
-          joysticks[i].b2 = buttons & joysticks[i].offsets.b2_mask;
-          joysticks[i].b3 = buttons & joysticks[i].offsets.b3_mask;
-          joysticks[i].b4 = buttons & joysticks[i].offsets.b4_mask;
-          
-          process_joy_input(i, &joysticks[i]);
-          joysticks[i].prev_x = report[joysticks[i].offsets.x_axis_byte];
-          joysticks[i].prev_y = report[joysticks[i].offsets.y_axis_byte];
-          joysticks[i].prev_buttons = report[joysticks[i].offsets.buttons_byte];
-          break;
+        usb_joystick* joy = &joysticks[i];
+        /* check if joystick is connected and values have changed since last report */
+        if(joy->dev_addr == dev_addr &&
+           joy->instance == instance &&
+           joy->connected)
+        {
+            /* If there are multiple report types, the reportid is assumed to be the first byte */
+            if ((!joy->offsets.has_report_id || joy->offsets.report_id == report[0]) &&
+                (joy->prev_x != report[joy->offsets.x_axis_byte] ||
+                joy->prev_y != report[joy->offsets.y_axis_byte] ||
+                joy->prev_buttons != report[joy->offsets.buttons_byte]))
+            {
+                joy->x = report[joy->offsets.x_axis_byte];
+                joy->y = report[joy->offsets.y_axis_byte];
+                uint8_t buttons = report[joy->offsets.buttons_byte];
+                joy->buttons = buttons;
+                joy->b1 = buttons & joy->offsets.b1_mask;
+                joy->b2 = buttons & joy->offsets.b2_mask;
+                joy->b3 = buttons & joy->offsets.b3_mask;
+                joy->b4 = buttons & joy->offsets.b4_mask;
+            
+                process_joy_input(i, &joysticks[i]);
+                joysticks[i].prev_x = report[joysticks[i].offsets.x_axis_byte];
+                joysticks[i].prev_y = report[joysticks[i].offsets.y_axis_byte];
+                joysticks[i].prev_buttons = report[joysticks[i].offsets.buttons_byte];
+            }
+            /*
+            * Can swap Joysticks by holding all 4 buttons for 2 seconds
+            */
+            if (joy->b1 && joy->b2 && joy->b3 && joy->b4)
+            {
+                absolute_time_t now = get_absolute_time();
+                if (swapping_joy == -1 && !swapped)  /* Swap not initiated and not finishing a swap */
+                {
+                    swapping_joy = i;
+                    swap_time = delayed_by_ms(now, 2000);
+                }
+                else if (swapping_joy == i && !swapped) /* Swap already initiated on this joystick */
+                {
+                    if (absolute_time_diff_us(swap_time, now) >= 0)
+                    {
+                        printf("SWAPPING JOYSTICKS\n");
+                        usb_joystick swapped_joy[2];
+                        memcpy(&swapped_joy[0], &joysticks[1], sizeof(usb_joystick));
+                        memcpy(&swapped_joy[1], &joysticks[0], sizeof(usb_joystick));
+                        memcpy(joysticks, swapped_joy, sizeof(swapped_joy));
+                        swapped = true;
+                        swapping_joy = (swapping_joy == 0) ? 1 : 0;
+                    }
+                }
+            }
+            else if (swapping_joy == i) /* Buttons released on swapping joystick */
+            {
+                swapping_joy = -1;
+                swapped = false;
+            }
+            /* Report is for a single joystick. Don't keep looking */
+            break;         
         }
     }
 }
