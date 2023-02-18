@@ -3,14 +3,26 @@ set(PICO_BOARD vgaboard)
 set(BOARD pico_sdk)
 set(FAMILY rp2040)
 set(DAZ_AUDIO false)
-include(tinyusb/hw/bsp/family_support.cmake)
-include(pico-sdk/external/pico_sdk_import.cmake)
-include(pico-extras/external/pico_extras_import.cmake)
+
+set(PICO_SDK_PATH ${CMAKE_SOURCE_DIR}/pico-sdk)
+set(PICO_EXTRAS_PATH ${CMAKE_SOURCE_DIR}/pico-extras)
+
+include(pico_sdk_import.cmake)
+include(pico_extras_import.cmake)
+include(add_git_submodule.cmake)
+
 project(pico_dazzler_project C CXX)
+
+add_git_submodule(tinyusb_due)
+add_git_submodule(pico-sdk)
+add_git_submodule_recurse(pico-extras)
+
+include(tinyusb_due/hw/bsp/family_support.cmake)
+
 #set(CMAKE_C_STANDARD 11)
 #set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-include_directories(~/src/pico_dazzler)
+include_directories(${CMAKE_SOURCE_DIR})
 
 #pico_sdk_init()
 
@@ -55,7 +67,6 @@ else()
   add_executable(daz_audio
   daz_audio.c
   )
-
 
   pico_enable_stdio_uart(daz_audio 1)
   pico_enable_stdio_usb(daz_audio 0)
