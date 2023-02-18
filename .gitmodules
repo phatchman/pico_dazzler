@@ -6,4 +6,4 @@
 	url = https://github.com/raspberrypi/pico-extras.git
 [submodule "tinyusb_due"]
 	path = tinyusb_due
-	url = git@github.com:phatchman/tinyusb_due.git
+	url = https://github.com/phatchman/tinyusb_due.git
