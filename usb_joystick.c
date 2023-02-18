@@ -66,7 +66,7 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_re
     printf("HID device address = %d, instance = %d is mounted\r\n", dev_addr, instance);
     printf("Instance = %d, VID = %04x, PID = %04x\r\n", instance, vid, pid);
 
-#ifdef DEBUG_TRACE
+#if DEBUG_TRACE > 0
     for (int i = 0 ; i < desc_len ; i++)
     {
         printf("%02X ", desc_report[i]);
