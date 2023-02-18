@@ -11,13 +11,15 @@
 #include "pico/stdlib.h"
 #include "pico/util/queue.h"
 #include "pico/audio_i2s.h"
+#include "audio_i2s.pio.h"
 #include "pico/binary_info.h"
 #include "hardware/pio.h"
 
 #define DEBUG
 
 #define audio_pio __CONCAT(pio, PICO_AUDIO_I2S_PIO)
-bi_decl(bi_3pins_with_names(PICO_AUDIO_I2S_DATA_PIN, "I2S DIN", PICO_AUDIO_I2S_CLOCK_PIN_BASE, "I2S BCK", PICO_AUDIO_I2S_CLOCK_PIN_BASE+1, "I2S LRCK"));
+#define GPIO_FUNC_PIOx __CONCAT(GPIO_FUNC_PIO, PICO_AUDIO_I2S_PIO)
+
 bool play_audio_sample_cb(struct repeating_timer *t);
 
 static uint32_t current_sample = 0;
@@ -29,6 +31,40 @@ static alarm_pool_t *audio_alarm_pool;
 static queue_t chan0_queue;
 static queue_t chan1_queue;
 static audio_buffer_pool_t *producer_pool;
+
+extern struct {
+    audio_buffer_t *playing_buffer;
+    uint32_t freq;
+    uint8_t pio_sm;
+    uint8_t dma_channel;
+} shared_state;
+
+static void dazzler_update_pio_frequency(uint32_t sample_freq) {
+    uint32_t system_clock_frequency = clock_get_hz(clk_sys);
+    assert(system_clock_frequency < 0x40000000);
+    uint32_t divider = system_clock_frequency * 4 / sample_freq; // avoid arithmetic overflow
+    assert(divider < 0x1000000);
+    pio_sm_set_clkdiv_int_frac(audio_pio, shared_state.pio_sm, divider >> 8u, divider & 0xffu);
+    shared_state.freq = sample_freq;
+}
+
+const audio_format_t *dazzler_audio_i2s_setup(const audio_format_t *intended_audio_format,
+                                               const audio_i2s_config_t *config) {
+    uint func = GPIO_FUNC_PIOx;
+    gpio_set_function(config->data_pin, func);
+    gpio_set_function(config->clock_pin_base, func);
+    gpio_set_function(config->clock_pin_base + 1, func);
+
+    uint8_t sm = shared_state.pio_sm = config->pio_sm;
+    pio_sm_claim(audio_pio, sm);
+    printf("PIO = %d, sm = %d\n", (audio_pio == pio0) ? 0 : 1, sm);
+    uint offset = pio_add_program(audio_pio, &audio_i2s_program);
+
+    audio_i2s_program_init(audio_pio, sm, offset, config->data_pin, config->clock_pin_base);
+
+    return intended_audio_format;
+}
+
 
 void audio_init() {
     static repeating_timer_t audio_timer;
@@ -46,7 +82,7 @@ void audio_init() {
         .sample_stride = 2
     };
 
-    producer_pool = audio_new_producer_pool(&producer_format, 16, 1); // todo correct size
+//    producer_pool = audio_new_producer_pool(&producer_format, 16, 1); // todo correct size
     bool __unused ok;
     const struct audio_format *output_format;
     printf("PICO_AUDIO_I2S_DATA_PIN[%d] PICO_AUDIO_I2S_CLOCK_PIN_BASE[%d]\n", 
@@ -59,14 +95,25 @@ void audio_init() {
             .pio_sm = 3,
     };
 
+#if 1
+    dazzler_audio_i2s_setup(&audio_format, &config);
+#else   
     output_format = audio_i2s_setup(&audio_format, &config);
     if (!output_format) {
         panic("PicoAudio: Unable to open audio device.\n");
     }
-
+#endif
+#if 1
+    dazzler_update_pio_frequency(producer_format.format->sample_freq);
+#else
     ok = audio_i2s_connect(producer_pool);
     assert(ok);
+#endif
+#if 1
+    pio_sm_set_enabled(audio_pio, shared_state.pio_sm, true);
+#else
     audio_i2s_set_enabled(true);
+#endif
     queue_init(&chan0_queue, 4, 512);
     queue_init(&chan1_queue, 4, 512);
     audio_alarm_pool = alarm_pool_create(2, 2);
