@@ -193,7 +193,14 @@ void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t cons
                         memcpy(&swapped_joy[1], &joysticks[0], sizeof(usb_joystick));
                         memcpy(joysticks, swapped_joy, sizeof(swapped_joy));
                         swapped = true;
+                        /* Clear button presses on other joystick */
+                        if (joysticks[swapping_joy].connected)
+                        {
+                            process_joy_input(swapping_joy, &joysticks[swapping_joy]);
+                        }
                         swapping_joy = (swapping_joy == 0) ? 1 : 0;
+                        /* Send udpate for initiating joystick */
+                        process_joy_input(swapping_joy, &joysticks[swapping_joy]);
                     }
                 }
             }
