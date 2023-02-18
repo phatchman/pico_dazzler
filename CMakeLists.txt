@@ -7,15 +7,16 @@ set(DAZ_AUDIO false)
 set(PICO_SDK_PATH ${CMAKE_SOURCE_DIR}/pico-sdk)
 set(PICO_EXTRAS_PATH ${CMAKE_SOURCE_DIR}/pico-extras)
 
-include(pico_sdk_import.cmake)
-include(pico_extras_import.cmake)
 include(add_git_submodule.cmake)
-
-project(pico_dazzler_project C CXX)
-
 add_git_submodule(tinyusb_due)
 add_git_submodule(pico-sdk)
 add_git_submodule_recurse(pico-extras)
+
+include(pico_sdk_import.cmake)
+include(pico_extras_import.cmake)
+
+project(pico_dazzler_project C CXX)
+
 
 include(tinyusb_due/hw/bsp/family_support.cmake)
 
