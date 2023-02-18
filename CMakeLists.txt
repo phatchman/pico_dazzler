@@ -30,6 +30,14 @@ target_compile_definitions(pico_dazzler PUBLIC
     USE_AUDIO_I2S=1
     PICO_AUDIO_I2S_DMA_IRQ=1
     PICO_AUDIO_I2S_PIO=1
+    DEBUG_MAIN=0
+    TRACE_MAIN=0
+    DEBUG_AUDIO=0
+    TRACE_AUDIO=0
+    DEBUG_DESCRIPTOR=0
+    TRACE_DESCRIPTOR=0
+    DEBUG_JOYSTICK=0
+    TRACE_JOYSTICK=0
   )
 
   family_configure_target(pico_dazzler)

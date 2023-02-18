@@ -41,7 +41,11 @@
 #include "pico/binary_info.h"
 #include "hardware/pio.h"
 
-#define DEBUG
+
+#define DEBUG_INFO  DEBUG_AUDIO
+#define DEBUG_TRACE TRACE_AUDIO
+#include "debug.h"
+
 #define AUDIO_QUEUE_LEN     512         /* Keep a buffer of 512 samples. This seems to be enough to minimise overflows 
                                            without delaying audio too much */
 #define HWALARM_NUM         2           /* Dedicated ardware alarm to use */
@@ -62,11 +66,14 @@ static queue_t chan0_queue;             /* Queue of audio samples for left chann
 static queue_t chan1_queue;             /* Queue of audio samples for right channel */
 
 /* Set PIO State machine frequency to be multiple of sample frequency. 
- * Required so that state machine clocks out the data bits at the correct rate */
+ * Required so that state machine clocks out the data bits at the correct rate
+ * Divider is in 1/256th of clock cycle. 2 PIO clock cycles per output and 32 bit to output
+ * equals system_clock_frequency * 256 / 32 / 2 / sample_freq
+ * equals system_clock_frequency * 4 / sample_freq */
 static void dazzler_update_pio_frequency(uint32_t sample_freq, uint pio_sm) {
     uint32_t system_clock_frequency = clock_get_hz(clk_sys);
     assert(system_clock_frequency < 0x40000000);
-    uint32_t divider = system_clock_frequency * 4 / sample_freq; // avoid arithmetic overflow
+    uint32_t divider = system_clock_frequency * 4 / sample_freq;
     assert(divider < 0x1000000);
     pio_sm_set_clkdiv_int_frac(audio_pio, pio_sm, divider >> 8u, divider & 0xffu);
 }
@@ -81,7 +88,7 @@ static void dazzler_audio_i2s_setup(const audio_format_t *intended_audio_format,
 
     uint8_t sm = config->pio_sm;
     pio_sm_claim(audio_pio, sm);
-    printf("PIO = %d, sm = %d\n", (audio_pio == pio0) ? 0 : 1, sm);
+    PRINT_INFO("I2S PIO = %d, sm = %d\n", (audio_pio == pio0) ? 0 : 1, sm);
     uint offset = pio_add_program(audio_pio, &audio_i2s_program);
 
     audio_i2s_program_init(audio_pio, sm, offset, config->data_pin, config->clock_pin_base);
@@ -206,9 +213,7 @@ void audio_add_sample(uint8_t channel, uint16_t delay_us, uint8_t sample)
         uint32_t value = (delay_us << 16) | (sample << 8);
         if (queue_try_add(&chan0_queue, &value) == false)
         {
-#ifdef DEBUG
-            printf("Chan0 audio queue full\n");
-#endif
+            PRINT_INFO("Chan0 audio queue full\n");
         }
     }
     else
@@ -216,9 +221,7 @@ void audio_add_sample(uint8_t channel, uint16_t delay_us, uint8_t sample)
         uint32_t value = (delay_us << 16) | (sample << 8);
         if (queue_try_add(&chan1_queue, &value) == false)
         {
-#ifdef DEBUG
-            printf("Chan1 audio queue full\n");
-#endif
+            PRINT_INFO("Chan1 audio queue full\n");
         }
     }
     return;

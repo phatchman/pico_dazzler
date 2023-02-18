@@ -26,13 +26,16 @@
 #include "tusb.h"
 #include <string.h>
 
+
+#define DEBUG_INFO  DEBUG_JOYSTICK
+#define DEBUG_TRACE TRACE_JOYSTICK
+#include "debug.h"
+
 /* Commands sent to Altair-duino */
 #define DAZ_JOY1      0x10
 #define DAZ_JOY2      0x20
 #define DAZ_KEY       0x30
 
-//#define DEBUG
-//#define DEBUG0
 /* Support 2 joysticks */
 static usb_joystick joysticks[2];
 
@@ -63,7 +66,7 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_re
     printf("HID device address = %d, instance = %d is mounted\r\n", dev_addr, instance);
     printf("Instance = %d, VID = %04x, PID = %04x\r\n", instance, vid, pid);
 
-#ifdef DEBUG
+#ifdef DEBUG_TRACE
     for (int i = 0 ; i < desc_len ; i++)
     {
         printf("%02X ", desc_report[i]);
@@ -133,11 +136,11 @@ void tuh_hid_umount_cb(uint8_t dev_addr, uint8_t instance)
   }
 }
 
-//#define DEBUGXXX
+
 /* Invoked when received report from device via interrupt endpoint */
 void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* report, uint16_t len)
 {
-//    printf("tuh_hid_report_received_cb\n");
+    PRINT_TRACE("tuh_hid_report_received_cb\n");
     static absolute_time_t swap_time;
     static int swapping_joy = -1;   /* Joystick no that is initiating swap */
     static bool swapped = false;    /* True if swapped, but buttons not yet released */
@@ -215,9 +218,7 @@ void schedule_joy_input()
         if (joysticks[i].connected)
         {
             bool result = tuh_hid_receive_report(joysticks[i].dev_addr, joysticks[i].instance);
-#ifdef DEBUG0
-            printf("tuh_hid_receive_report(%d, %d) = %d\n", joysticks[i].dev_addr, joysticks[i].instance, result);
-#endif
+            PRINT_TRACE("tuh_hid_receive_report(%d, %d) = %d\n", joysticks[i].dev_addr, joysticks[i].instance, result);
         }
     }
 }
@@ -262,9 +263,6 @@ void process_joy_input(int joynum, usb_joystick* joy)
     daz_msg[1] = get_joy_value_x(joy->x);
     daz_msg[2] = get_joy_value_y(joy->y);
     
- //   printf ("Sending joystick report\r\n");
-#ifdef DEBUG
-    printf("Joy = %d, X = %d, Y = %d, btn = %x, msg[0] = %02x\r\n", joynum, (int8_t) daz_msg[1], (int8_t) daz_msg[2], daz_msg[0] & 0x0F, daz_msg[0]);
-#endif
+    PRINT_INFO("Joy = %d, X = %d, Y = %d, btn = %x, msg[0] = %02x\r\n", joynum, (int8_t) daz_msg[1], (int8_t) daz_msg[2], daz_msg[0] & 0x0F, daz_msg[0]);
     usb_send_bytes(daz_msg, 3);
 }

@@ -31,8 +31,10 @@
 #include "local_hid.h"
 
 
-#define DEBUG_INFO
-// #define DEBUG_TRACE
+
+#define DEBUG_INFO DEBUG_DESCRIPTOR
+#define DEBUG_TRACE TRACE_DESCRIPTOR
+#include "debug.h"
 
 struct hid_input_button_skip
 {
@@ -43,18 +45,6 @@ struct hid_input_button_skip
 /* Number of buttons in the HID descriptor to skip to find the buttons to map to 1/2/3/4.
  * If the pid of the controller is not listed here, the first 4 buttons found are used */
 struct hid_input_button_skip controller_skip_buttons[] = {0x0268, 12}; /* For PS3, skip first 12 buttons */
-
-#ifdef DEBUG_TRACE
-#define PRINT_TRACE(...) { printf(__VA_ARGS__); }
-#else
-#define PRINT_TRACE(...) {}
-#endif
-
-#ifdef DEBUG_INFO
-#define PRINT_INFO(...) { printf(__VA_ARGS__); }
-#else
-#define PRINT_INFO(...) {}
-#endif
 
 #if 0 // Descriptors for testing the parser
 const uint8_t snes_descriptor[] = {
