@@ -97,3 +97,4 @@ Debug output should not really be necessary, but will be handy if you run into i
 1. Support XBOX controllers
 2. Change the I2S audio PIO assembly to repeat the current sample, rather than needing a new value supplied at 48kHz. This could allow us to support higher sampling rates.
 3. Investigate issue with bottom line of VGA displaying "random" data. This is likely due to a bug in the scanline video sdk when scaling to 1024x768.
+4. Support USB keyboard devices as some programs expect input from a "Cromemco keyboard" rather than SIO.
