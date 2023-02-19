@@ -25,7 +25,7 @@ In addition to the PIMORONI board, you will need:
 3. A USB Micro to Type A "On The Go" (OTG) USB adapter.
 
 Optionally for Joysticks you will need:
-1. A USB, HID=compliant Analog Joystick / Controller / Gamepad. (Unfortunately XBOX controllers are not HID-compliant devices, but most other USB controllers are)
+1. A USB, HID-compliant Analog Joystick / Controller / Gamepad. (Unfortunately XBOX controllers are not HID-compliant devices, but most other USB controllers are)
 2. A USB Type A Hub with at least 3 ports
 
 Optionally for Sound:
