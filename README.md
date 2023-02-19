@@ -35,7 +35,8 @@ If you want to hook into speakers, you'll need something that can take a line-in
 Pictures of my setup will be provided shortly.
 
 # Building from source
-Building from source is not necessary, you can used the provided pico_dazzler.uf2 file. But building from source is quite strait forward.
+Building from source is not necessary, you can used the provided pico_dazzler.uf2 file. But you may want to build from source to enable debugging features 
+or add support for other gamre controllers etc.
 First you must have a working Pico C/C++ build environment. Please refer to [Getting started with Raspberry Pi Pico](https://datasheets.raspberrypi.com/pico/getting-started-with-pico.pdf) or [Pico C++ development using Windows](https://learn.pimoroni.com/article/pico-development-using-wsl).
 After you have a confirmed working environment, I'd suggest loading one of the VGA examples from the pico-playground repository to confirm the VGA board is working correctly.
 
@@ -63,6 +64,16 @@ from the USB device port from the Due to the Pico, but I'm not sure if all Hubs 
 While you can power the whole system via the USB input to the Altair Duino, and I've not had any problems doing this, I'd suggest using the external
 power supply, just to be safe on power limits.
 
+# Customizing Game Controller Buttons
+Most game controllers come with more than 4 buttons, and by default the first 4 buttons listed in the HID Descriptor will be assigned as buttons 1-4.
+In case the buttons automatically selected are not to your liking, you add to the controller_skip_buttons struct in parse_descriptor.c
+```
+struct hid_input_button_skip controller_skip_buttons[] = {0x0268, 12}; /* For PS3, skip first 12 buttons */
+```
+The first value is the product id (PID) of the USB device, which can be found either by looking at the debug output produced when connecting
+the controller to the Pico, or from Windows Device Manager.<br>
+The second value is the number of buttons to skip before assigning the 4 buttons. There is no easy way to determine this value outside of trail and error, 
+but typically you will want to try increments of 4.
 
 # Performance
 [ Stats to come ]
@@ -70,6 +81,14 @@ For almost all uses, the PICO will provide native-speed performance. However, I'
 1. The USB Host implementation on the Pico cannot read data at full speed. For fast updates to the video memory, the Pico may cause slowdowns. 
 I've not found this to be noticeable in any real-world applications.
 2. The SOUNDF.COM application can produce audio faster than the 48kHz sampling rate implemented. You will get some occasional pops at the higest frequencies.
+
+# Debug Output
+
+To get debug output, you will need to do some soldering. There is space for a 2x3 pin header on the board marked GP21, GP20, -. <br>
+You will need a 3.3v TTL USB serial-convert, a Raspberry Pi, or a second Pico to connect to this header to read the serial output. <br>
+The port is set to 112500 8 N 1. And you should connect GP21 to TX, GP20 to RX and - to Ground.
+
+Debug output should not really be necessary, but will be handy if you run into issues with your USB hub or controller.
 
 # Known Issues
 1. The bottom line of the VGA displays "garbage" data. This is likely a bug in the Pico's scanline video SDK, which I've not investigated yet.
