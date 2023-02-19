@@ -9,7 +9,7 @@ A large amount of credit for this project belongs to David as it borrows heavily
 It provides the following features:
 * Low cost Dazzler implementation using off-the shelf, easy to obtain components. No soldering required!
 * VGA graphics output
-* USB Joystikc support for 1 or 2 joysticks / game controllers.
+* USB Joystick support for 1 or 2 joysticks / game controllers.
 * Stereo line-out audio
 * A small package that fits neatly within the Altair Duino
 
