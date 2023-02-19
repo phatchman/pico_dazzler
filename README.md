@@ -35,7 +35,7 @@ If you want to hook into speakers, you'll need something that can take a line-in
 Pictures of my setup will be provided shortly.
 
 # Building from source
-Building from source is not necessary, you can used the provided pico_dazzler.uf2 file. But you may want to build from source to enable debugging features 
+Building from source is not necessary, you can use the provided pico_dazzler.uf2 file. But you may want to build from source to enable debugging features 
 or add support for other gamre controllers etc.
 First you must have a working Pico C/C++ build environment. Please refer to [Getting started with Raspberry Pi Pico](https://datasheets.raspberrypi.com/pico/getting-started-with-pico.pdf) or [Pico C++ development using Windows](https://learn.pimoroni.com/article/pico-development-using-wsl).
 After you have a confirmed working environment, I'd suggest loading one of the VGA examples from the pico-playground repository to confirm the VGA board is working correctly.
@@ -85,7 +85,7 @@ I've not found this to be noticeable in any real-world applications.
 # Debug Output
 
 To get debug output, you will need to do some soldering. There is space for a 2x3 pin header on the board marked GP21, GP20, -. <br>
-You will need a 3.3v TTL USB serial-convert, a Raspberry Pi, or a second Pico to connect to this header to read the serial output. <br>
+You will need one of a 3.3v compatible TTL USB serial-converter, a Raspberry Pi, or a second Pico to connect to this header to read the serial output. <br>
 The port is set to 112500 8 N 1. And you should connect GP21 to TX, GP20 to RX and - to Ground.
 
 Debug output should not really be necessary, but will be handy if you run into issues with your USB hub or controller.
