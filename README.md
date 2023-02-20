@@ -2,9 +2,10 @@
 Dazzler graphics for the Altair Duino / Altair Simulator using Raspberry Pi Pico
 
 # What is Pico Dazzler?
-This is an implementation of the Cromemco Dazzler graphics hardware for David Hansel's wonderful Altair 8800 simulator / Altair Duino, 
+This is an implementation of the Cromemco Dazzler graphics hardware for David Hansel's wonderful Altair 8800 simulator, 
 using a Respberry Pi Pico. 
-A large amount of credit for this project belongs to David as it borrows heavily from his work and I encourage you to check out his [PIC32 hardware solution](https://www.hackster.io/david-hansel/dazzler-display-for-altair-simulator-3febc6) 
+A large amount of credit for this project belongs to David as it borrows heavily from his work and I encourage you to check out his [PIC32 hardware solution](https://www.hackster.io/david-hansel/dazzler-display-for-altair-simulator-3febc6) <br>
+It is fully compatible with the [Altair-Duino](https://adwaterandstir.com/product/altair-8800-emulator-kit/) and fits nicely within the case.
 
 It provides the following features:
 * Low cost Dazzler implementation using off-the shelf, easy to obtain components. No soldering required!
@@ -34,6 +35,12 @@ If you want to hook into speakers, you'll need something that can take a line-in
 
 Pictures of my setup will be provided shortly.
 
+# Preparing the Altair 8800 Simulator firmware
+The firmware shipped with the Altair-Duino doesn't support the Dazzler out of the Box. Please follow David's instructions on his [Project Page](https://www.hackster.io/david-hansel/dazzler-display-for-altair-simulator-3febc6) and the [Altair-Duino instructions](https://adwaterandstir.com/install/) for information on how to rebuild the firmware. Take note of the "config.h" options used in building the firmware to make sure you retain your existing functionality.
+
+I would highly recommend testing with David Hansel's [Windows Client](https://github.com/dhansel/Dazzler/tree/master/Windows) before proceeding to make sure the
+Altair firmware is configured correctly.
+
 # Building from source
 Building from source is not necessary, you can use the provided pico_dazzler.uf2 file. But you may want to build from source to enable debugging features 
 or add support for other gamre controllers etc.
@@ -50,11 +57,16 @@ After you build environment is set up, simply:
 
 If all goes well you will end up with a pico_dazzler.uf2 file which can be loaded onto the Pico via USB.
 
+# Loading the Firmware
+Load the pico_dazzler.uf2 file onto the Pico using the method of your choice. Typically this involves:
+1) Holding down the BOOT/SEL button while connecting the USB cable
+2) Copying the pico_dazzler.uf2 file to the Mass Storage drive associated with the Pico
+
 # Connecting to the Altair Simulator / Altair Duino.
 
 This is a very straight forward process. [Images to come shortly]
 Simply connect the pico via the USB OTG cable either to the optional USB hub or directly to the USB Native Port on the Ardiuno Due. (This is the 2nd USB port on the Due. The one that is not normally used by the Altair Duino).<br>
-Optionally connect the USB Controllers / Joysick and line-out audio.<br>
+Optionally connect the USB Controllers / Joysick and line-out audio. Note that the audio uses the DAC line-out<br>
 Connect the VGA cable to the monitor.<br>
 You are done!
 
@@ -74,6 +86,19 @@ The first value is the product id (PID) of the USB device, which can be found ei
 the controller to the Pico, or from Windows Device Manager.<br>
 The second value is the number of buttons to skip before assigning the 4 buttons. There is no easy way to determine this value outside of trail and error, 
 but typically you will want to try increments of 4.
+
+# Test Software
+The folks at S100 computers have made a recreation of the Dazzler board, named the [Dazzler II] (http://www.s100computers.com/My%20System%20Pages/Dazzler%20II%20Board/Dazzler_II%20Board.htm) for S-100 bus computers. 
+There is a wealth of information on the Dazzler available there. At the end of the page is some software that you can use to test out the board.
+Especially useful are:
+* SOUND.COM and SOUNDF.COM from the SOUND.ZIP download
+* ADCTEST.COM
+* COLOR.COM
+
+The last 2 programs are also shipped on the Dazzler CPM disk shipped with the Altair-Duino.
+
+# Reporting Issues
+Before reporting an issue, please test the program on David's [Windows client](https://github.com/dhansel/Dazzler/tree/master/Windows) if possible. A lot of the Dazzler programs either work in unintuitive ways, or have been crudely ported to CPM and may not work at all.
 
 # Performance
 [ Stats to come ]
