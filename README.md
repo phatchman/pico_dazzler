@@ -89,7 +89,7 @@ The second value is the number of buttons to skip before assigning the 4 buttons
 but typically you will want to try increments of 4.
 
 # Test Software
-The folks at S100 computers have made a recreation of the Dazzler board, named the [Dazzler II] (http://www.s100computers.com/My%20System%20Pages/Dazzler%20II%20Board/Dazzler_II%20Board.htm) for S-100 bus computers. 
+The folks at S100 computers have made a recreation of the Dazzler board, named the [Dazzler II](http://www.s100computers.com/My%20System%20Pages/Dazzler%20II%20Board/Dazzler_II%20Board.htm) for S-100 bus computers. 
 There is a wealth of information on the Dazzler available there. At the end of the page is some software that you can use to test out the board.
 Especially useful are:
 * SOUND.COM and SOUNDF.COM from the SOUND.ZIP download
