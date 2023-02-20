@@ -3,7 +3,7 @@ Dazzler graphics for the Altair Duino / Altair Simulator using Raspberry Pi Pico
 
 # What is Pico Dazzler?
 This is an implementation of the Cromemco Dazzler graphics hardware for David Hansel's wonderful Altair 8800 simulator, 
-using a Respberry Pi Pico. 
+using a Raspberry Pi Pico. 
 A large amount of credit for this project belongs to David as it borrows heavily from his work and I encourage you to check out his [PIC32 hardware solution](https://www.hackster.io/david-hansel/dazzler-display-for-altair-simulator-3febc6)
 
 The Pico Dazzler is fully compatible with the [Altair-Duino](https://adwaterandstir.com/product/altair-8800-emulator-kit/) and fits nicely within the case.
