@@ -22,9 +22,10 @@ use software like AMBUSH.COM which requires the second joystick to play.
 I chose to develop for the board described in [Hardware Design with RP2040](https://datasheets.raspberrypi.com/rp2040/hardware-design-with-rp2040.pdf), a commercial implementation of this design is made by [PIMORONI](https://shop.pimoroni.com/products/pimoroni-pico-vga-demo-base). It's widely available and relatively low cost at around USD $25 (as of early 2023).
 
 In addition to the PIMORONI board, you will need:
-1. A Raspberry Pi Pico
+1. A Raspberry Pi Pico.
 2. A VGA monitor capable of displaying at 1024x768 resolution.
 3. A USB Micro to Type A "On The Go" (OTG) USB adapter.
+4. 4. A USB Micro to Type A USB Cable.
 
 Optionally for Joysticks you will need:
 1. One or two USB, HID-compliant Analog Joystick / Controller / Gamepad. (Unfortunately XBOX controllers are not HID-compliant devices, but most other USB controllers are)
