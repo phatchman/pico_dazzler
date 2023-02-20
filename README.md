@@ -45,7 +45,7 @@ Make sure you go into the simulator's configuration menu and configure the Dazzl
 I would highly recommend testing with David Hansel's [Windows Client](https://github.com/dhansel/Dazzler/tree/master/Windows) before proceeding to make sure the
 Altair firmware is configured correctly.
 
-Note that unless you unconfigure all of the SIO output from using the Due's programming port, you must use the Due's Native USB port (the port not normally used by the Altair Duino's console) to connect to Dazzler client.
+I've never managed to get Dazzler output to work on the Due's programming port. Instead you must use the Due's Native USB port (the port not normally used by the Altair Duino's console) to connect to Dazzler client.
 
 # Building from source
 Building from source is not necessary, you can use the provided pico_dazzler.uf2 file. But you may want to build from source to enable debugging features 
