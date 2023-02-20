@@ -85,7 +85,7 @@ struct hid_input_button_skip controller_skip_buttons[] = {0x0268, 12}; /* For PS
 ```
 The first value is the product id (PID) of the USB device, which can be found either by looking at the debug output produced when connecting
 the controller to the Pico, or from Windows Device Manager.<br>
-The second value is the number of buttons to skip before assigning the 4 buttons. There is no easy way to determine this value outside of trail and error, 
+The second value is the number of buttons to skip before assigning the 4 buttons. There is no easy way to determine this value outside of trial and error, 
 but typically you will want to try increments of 4.
 
 # Test Software
