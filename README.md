@@ -110,7 +110,7 @@ Before reporting an issue, please test the program on David's [Windows client](h
 [ Stats to come ]
 For almost all uses, the PICO will provide native-speed performance. However, I've found 2 issues:
 1. The USB Host implementation on the Pico cannot read data at full speed. For fast updates to the video memory, the Pico may cause slowdowns. 
-I've not found this to be noticeable in any real-world applications.
+I've not found this to be noticeable, except in BARPLOT, which changes the video mode and video memory adress on each frame.
 2. The SOUNDF.COM application can produce audio faster than the 48kHz sampling rate implemented. You will get some occasional pops at the highest frequencies.
 
 # Debug Output
