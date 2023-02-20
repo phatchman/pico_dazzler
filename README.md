@@ -107,11 +107,30 @@ The last 2 programs are also contained on the Dazzler CPM disk shipped with the 
 Before reporting an issue, please test the program on David's [Windows client](https://github.com/dhansel/Dazzler/tree/master/Windows) if possible. A lot of the Dazzler programs either work in unintuitive ways, or have been crudely ported to CPM and may not work with your particular CPM version or configuration.
 
 # Performance
-[ Stats to come ]
+
 For almost all uses, the PICO will provide native-speed performance. However, I've found 2 issues:
 1. The USB Host implementation on the Pico cannot read data at full speed. For fast updates to the video memory, the Pico may cause slowdowns. 
 I've not found this to be noticeable, except in BARPLOT, which changes the video mode and video memory adress on each frame.
 2. The SOUNDF.COM application can produce audio faster than the 48kHz sampling rate implemented. You will get some occasional pops at the highest frequencies.
+
+## Performance Testing Results
+The results below are from a test program that updates the full 2k of video ram with an alternating pattern in a tight loop, as fast as possible. 
+This test represents the absolute worst-case scenario.
+
+| Scenario                                   | Average Time    |
+| ------------------------------------------ | --------------- |
+| Windows Client                             |             19s |
+| Pico only reading USB with no processing   |             45s |
+| Pico Dazzler with full processing          |             46s |
+| GDEMO.COM (Windows Client)                 |            1:50 |
+| GDEMO.COM (Pico Dazzler)                   |            1:50 |
+
+From preliminary investigations, it doesn't look like there is any software solution to this. The Pico should be more than capable of handling the data rate, and more 
+investigation is necessary. As you can see, there is not much point optimising the Pico Dazzler software as performance is limited by the USB host receive rate.
+
+In real-world applications it is rare that this speed difference will make any difference as the application spends more time calculating than updating the video. The Kaleidoscope does run slightly slower and Barplot, which alternates between video ram addresses on each frame (requiring a full refresh of the video ram), shows a lot of flicker.
+
+Outside of that I haven't seen any practical issues. Noteably GDEMO.COM, the Dazzler Demo program, runs in exactly the same amount of time as for the Windows client.
 
 # Debug Output
 
@@ -129,4 +148,4 @@ Debug output should not really be necessary, but will be handy if you run into i
 2. Change the I2S audio PIO assembly to repeat the current sample, rather than needing a new value supplied at a constant 48kHz. This could allow us to support higher sampling rates and eliminate the audio queue overflows at high frequencies.
 3. Investigate issue with bottom line of VGA displaying "random" data. This is likely due to a bug in the scanline video sdk when scaling to 1024x768.
 4. Support USB keyboard devices as some programs expect input from a Cromemeco serial board, rather than the emulated SIO ports.
-5. Implement double-buffering, which might help programs like BARPLOT, which ralternate the graphics mode and vram address on each frame.
+5. Implement double-buffering, which might help programs like BARPLOT, which alternates the graphics mode and vram address on each frame.
