@@ -183,7 +183,7 @@ uint16_t frame_buffer[WIDTH * HEIGHT];
 /* 
  * This is a copy of the Altair's video ram. We need a copy of this because:
  * 1) When applications change modes, we need to refresh the scanvideo frame buffer from the altair RAM
- * 2) The Altair-duino dazzler code oftens sends the video rame bytes before the video mode, and need to
+ * 2) The Altair-duino dazzler code oftens sends the video ram bytes before the video mode, and need to
  *    refresh the scanvideo framebuffer whenever the video mode changes.
  */
 uint8_t raw_frame[2048];
@@ -326,7 +326,6 @@ volatile bool send_vsync = false;
 void __time_critical_func(render_loop) (void)
 {
     PRINT_INFO("Starting render\n");
-    absolute_time_t abs_time = get_absolute_time();
     while(true)
     {
         /* Wait for ready to render next scanline */
@@ -496,7 +495,7 @@ void set_vram(int addr, uint8_t value, bool refresh)
             }
 
             /* If bit is set, set pixel to foreground colour, otherwise set to black */
-            /* Pixel layout is as follows (wher e D0 is bit 0):
+            /* Pixel layout is as follows (where D0 is bit 0):
              * | D0 | D1 | D4 | D5 |
              * | D2 | D3 | D6 | D7 | 
              */
@@ -566,7 +565,7 @@ void set_vram(int addr, uint8_t value, bool refresh)
     }
 }
 
-/* Used when chaning video modes to copy from raw_frame into frame_buffer with the new mode */
+/* Used when changing video modes to copy from raw_frame into frame_buffer with the new mode */
 void refresh_vram()
 {
     for (int i = 0 ; i < 2048 ; i++)
