@@ -96,7 +96,7 @@ Especially useful are:
 * ADCTEST.COM
 * COLOR.COM
 
-The last 2 programs are also shipped on the Dazzler CPM disk shipped with the Altair-Duino.
+The last 2 programs are also contained on the Dazzler CPM disk shipped with the Altair-Duino.
 
 # Reporting Issues
 Before reporting an issue, please test the program on David's [Windows client](https://github.com/dhansel/Dazzler/tree/master/Windows) if possible. A lot of the Dazzler programs either work in unintuitive ways, or have been crudely ported to CPM and may not work at all.
