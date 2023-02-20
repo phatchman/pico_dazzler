@@ -25,7 +25,7 @@ In addition to the PIMORONI board, you will need:
 1. A Raspberry Pi Pico.
 2. A VGA monitor capable of displaying at 1024x768 resolution.
 3. A USB Micro to Type A "On The Go" (OTG) USB adapter.
-4. 4. A USB Micro to Type A USB Cable.
+4. A USB Micro to Type A USB Cable.
 
 Optionally for Joysticks you will need:
 1. One or two USB, HID-compliant Analog Joystick / Controller / Gamepad. (Unfortunately XBOX controllers are not HID-compliant devices, but most other USB controllers are)
