@@ -19,7 +19,7 @@ The joysticks can be "swapped" by holding all 4 buttons on one of the controller
 use software like AMBUSH.COM which requires the second joystick to play.
 
 # What hardware do I need?
-I chose to develop for the board described in [Hardware Design with RP2040](https://datasheets.raspberrypi.com/rp2040/hardware-design-with-rp2040.pdf), a commercial implementation of this design is made by [PIMORONI](https://shop.pimoroni.com/products/pimoroni-pico-vga-demo-base). It's widely available and relatively low cost at around USD $25, the last time I checked.
+I chose to develop for the board described in [Hardware Design with RP2040](https://datasheets.raspberrypi.com/rp2040/hardware-design-with-rp2040.pdf), a commercial implementation of this design is made by [PIMORONI](https://shop.pimoroni.com/products/pimoroni-pico-vga-demo-base). It's widely available and relatively low cost at around USD $25 (as of early 2023).
 
 In addition to the PIMORONI board, you will need:
 1. A Raspberry Pi Pico
@@ -27,12 +27,12 @@ In addition to the PIMORONI board, you will need:
 3. A USB Micro to Type A "On The Go" (OTG) USB adapter.
 
 Optionally for Joysticks you will need:
-1. A USB, HID-compliant Analog Joystick / Controller / Gamepad. (Unfortunately XBOX controllers are not HID-compliant devices, but most other USB controllers are)
+1. One or two USB, HID-compliant Analog Joystick / Controller / Gamepad. (Unfortunately XBOX controllers are not HID-compliant devices, but most other USB controllers are)
 2. A USB Type A Hub with at least 3 ports
 
 Optionally for Sound:
-The board provides line-out audio. I've found it drives earbud-style headphones OK. 
-If you want to hook into speakers, you'll need something that can take a line-in audio and ampflify it.
+The board provides line-out audio. I've found it drives earbud-style headphones fine. 
+If you want to hook into speakers, you'll need something that can take a line-in audio and amplify it appropriately.
 
 Pictures of my setup will be provided shortly.
 
