@@ -125,12 +125,14 @@ This test represents the absolute worst-case scenario.
 | GDEMO.COM (Windows Client)                 |            1:50 |
 | GDEMO.COM (Pico Dazzler)                   |            1:50 |
 
+As can be seen above, the bottleneck is the USB host receive rate on the Pico.<br>
 From preliminary investigations, it doesn't look like there is any software solution to this. The Pico should be more than capable of handling the data rate, and more 
-investigation is necessary. As you can see, there is not much point optimising the Pico Dazzler software as performance is limited by the USB host receive rate.
+investigation is necessary. The rest of the Pico Dazzler firmware adds negligible overhead.
 
-In real-world applications it is rare that this speed difference will make any difference as the application spends more time calculating than updating the video. The Kaleidoscope does run slightly slower and Barplot, which alternates between video ram addresses on each frame (requiring a full refresh of the video ram), shows a lot of flicker.
+In real-world applications it is rare that this speed difference will make any difference as the application spends more time calculating than updating the video ram.
+The Kaleidoscope does run slightly slower and Barplot, which alternates between video ram addresses on each frame (requiring a full refresh of the video ram), shows a lot of flicker.
 
-Outside of that I haven't seen any practical issues. Noteably GDEMO.COM, the Dazzler Demo program, runs in exactly the same amount of time as for the Windows client.
+Outside of that I haven't seen any practical issues. Noteably GDEMO.COM, the Dazzler Demo program, runs in exactly the same amount of time as the Windows client.
 
 # Debug Output
 
