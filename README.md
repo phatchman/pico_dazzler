@@ -39,8 +39,12 @@ If you want to hook into speakers, you'll need something that can take a line-in
 # Preparing the Altair 8800 Simulator firmware
 The firmware shipped with the Altair-Duino doesn't support the Dazzler out of the Box. Please follow David's instructions on his [Project Page](https://www.hackster.io/david-hansel/dazzler-display-for-altair-simulator-3febc6) and the [Altair-Duino instructions](https://adwaterandstir.com/install/) for information on how to rebuild the firmware. Take note of the "config.h" options used in building the firmware to make sure you retain your existing functionality.
 
+Make sure you go into the simulator's configuration menu and configure the Dazzler to use the Native USB Port.
+
 I would highly recommend testing with David Hansel's [Windows Client](https://github.com/dhansel/Dazzler/tree/master/Windows) before proceeding to make sure the
 Altair firmware is configured correctly.
+
+Note that unless you unconfigure all of the SIO output from using the Due's programming port, you must use the Due's Native USB port (the port not normally used by the Altair Duino's console) to connect to Dazzler client.
 
 # Building from source
 Building from source is not necessary, you can use the provided pico_dazzler.uf2 file. But you may want to build from source to enable debugging features 
