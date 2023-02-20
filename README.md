@@ -71,7 +71,7 @@ Optionally connect the USB Controllers / Joysick and line-out audio. Note that t
 Connect the VGA cable to the monitor.<br>
 You are done!
 
-The Pico will be powered by the Arduino Due's USB port, in the same way as the PIC32 version. The 4-port USB-3 hub I used passes through the power 
+The Pico is powered by the Arduino Due's USB port, in the same way as the PIC32 version. The 4-port USB-3 hub I used passes through the power 
 from the USB device port from the Due to the Pico, but I'm not sure if all Hubs have that feature. 
 
 While you can power the whole system via the USB input to the Altair Duino, and I've not had any problems doing this, I'd suggest using the external
@@ -99,28 +99,28 @@ Especially useful are:
 The last 2 programs are also contained on the Dazzler CPM disk shipped with the Altair-Duino.
 
 # Reporting Issues
-Before reporting an issue, please test the program on David's [Windows client](https://github.com/dhansel/Dazzler/tree/master/Windows) if possible. A lot of the Dazzler programs either work in unintuitive ways, or have been crudely ported to CPM and may not work at all.
+Before reporting an issue, please test the program on David's [Windows client](https://github.com/dhansel/Dazzler/tree/master/Windows) if possible. A lot of the Dazzler programs either work in unintuitive ways, or have been crudely ported to CPM and may not work with your particular CPM version or configuration.
 
 # Performance
 [ Stats to come ]
 For almost all uses, the PICO will provide native-speed performance. However, I've found 2 issues:
 1. The USB Host implementation on the Pico cannot read data at full speed. For fast updates to the video memory, the Pico may cause slowdowns. 
 I've not found this to be noticeable in any real-world applications.
-2. The SOUNDF.COM application can produce audio faster than the 48kHz sampling rate implemented. You will get some occasional pops at the higest frequencies.
+2. The SOUNDF.COM application can produce audio faster than the 48kHz sampling rate implemented. You will get some occasional pops at the highest frequencies.
 
 # Debug Output
 
 To get debug output, you will need to do some soldering. There is space for a 2x3 pin header on the board marked GP21, GP20, -. <br>
-You will need one of a 3.3v compatible TTL USB serial-converter, a Raspberry Pi, or a second Pico to connect to this header to read the serial output. <br>
+You will need one of a 3.3v compatible TTL USB serial-converter, a Raspberry Pi, a second Pico, or some other device capable of reading 3.3v TTL serial output. <br>
 The port is set to 112500 8 N 1. And you should connect GP21 to TX, GP20 to RX and - to Ground.
 
 Debug output should not really be necessary, but will be handy if you run into issues with your USB hub or controller.
 
 # Known Issues
-1. The bottom line of the VGA displays "garbage" data. This is likely a bug in the Pico's scanline video SDK, which I've not investigated yet.
+1. The bottom line of the VGA displays "garbage" data. This is likely a bug in the Pico's scanline video SDK, but I've not investigated yet.
 
 # TODO
 1. Support XBOX controllers
-2. Change the I2S audio PIO assembly to repeat the current sample, rather than needing a new value supplied at 48kHz. This could allow us to support higher sampling rates.
+2. Change the I2S audio PIO assembly to repeat the current sample, rather than needing a new value supplied at a constant 48kHz. This could allow us to support higher sampling rates and eliminate the audio queue overflows at high frequencies.
 3. Investigate issue with bottom line of VGA displaying "random" data. This is likely due to a bug in the scanline video sdk when scaling to 1024x768.
-4. Support USB keyboard devices as some programs expect input from a "Cromemco keyboard" rather than SIO.
+4. Support USB keyboard devices as some programs expect input from a Cromemeco serial board, rather than the emulated SIO ports.
