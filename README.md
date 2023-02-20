@@ -38,7 +38,7 @@ If you want to hook into speakers, you'll need something that can take a line-in
 ![My test setup](https://github.com/phatchman/pico_dazzler/blob/main/img/pico_dazzler.jpg)
 
 # Preparing the Altair 8800 Simulator firmware
-The firmware shipped with the Altair-Duino doesn't support the Dazzler out of the Box. Please follow David's instructions on his [Project Page](https://www.hackster.io/david-hansel/dazzler-display-for-altair-simulator-3febc6) and the [Altair-Duino instructions](https://adwaterandstir.com/install/) for information on how to rebuild the firmware. Take note of the "config.h" options used in building the firmware to make sure you retain your existing functionality.
+The firmware shipped with the Altair-Duino doesn't support the Dazzler out of the box. Please follow David's instructions on his [Project Page](https://www.hackster.io/david-hansel/dazzler-display-for-altair-simulator-3febc6) and the [Altair-Duino instructions](https://adwaterandstir.com/install/) for information on how to rebuild the firmware. Take note of the "config.h" options used in building the firmware to make sure you retain your existing functionality.
 
 Make sure you go into the simulator's configuration menu and configure the Dazzler to use the Native USB Port.
 
@@ -77,7 +77,7 @@ Connect the VGA cable to the monitor.<br>
 You are done!
 
 The Pico is powered by the Arduino Due's USB port, in the same way as the PIC32 version. The 4-port USB-3 hub I used passes through the power 
-from the USB device port from the Due to the Pico, but I'm not sure if all Hubs have that feature. 
+from the USB device port from the Due to the Pico, but I'm not sure if all Hubs have that feature. If your hub doesn't, the USB micro port on the PIMORONI board accepts an external 5V power supply. I suggest you build a USB micro power cable and find a nice place to tap into 5 volts.
 
 While you can power the whole system via the USB input to the Altair Duino, and I've not had any problems doing this, I'd suggest using the external
 power supply, just to be safe on power limits.
