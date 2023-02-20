@@ -34,7 +34,7 @@ Optionally for Sound:
 The board provides line-out audio. I've found it drives earbud-style headphones fine. 
 If you want to hook into speakers, you'll need something that can take a line-in audio and amplify it appropriately.
 
-Pictures of my setup will be provided shortly.
+![My test setup](https://github.com/phatchman/pico_dazzler/blob/main/img/pico_dazzler.jpg)
 
 # Preparing the Altair 8800 Simulator firmware
 The firmware shipped with the Altair-Duino doesn't support the Dazzler out of the Box. Please follow David's instructions on his [Project Page](https://www.hackster.io/david-hansel/dazzler-display-for-altair-simulator-3febc6) and the [Altair-Duino instructions](https://adwaterandstir.com/install/) for information on how to rebuild the firmware. Take note of the "config.h" options used in building the firmware to make sure you retain your existing functionality.
