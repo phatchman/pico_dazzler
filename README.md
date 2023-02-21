@@ -38,7 +38,7 @@ If you want to hook into speakers, you'll need something that can take a line-in
 ![My test setup](https://github.com/phatchman/pico_dazzler/blob/main/img/pico_dazzler.jpg)
 
 # Preparing the Altair 8800 Simulator firmware
-The firmware shipped with the Altair-Duino doesn't support the Dazzler out of the Box. Please follow David's instructions on his [Project Page](https://www.hackster.io/david-hansel/dazzler-display-for-altair-simulator-3febc6) and the [Altair-Duino instructions](https://adwaterandstir.com/install/) for information on how to rebuild the firmware. Take note of the "config.h" options used in building the firmware to make sure you retain your existing functionality.
+The firmware shipped with the Altair-Duino doesn't support the Dazzler out of the box. Please follow David's instructions on his [Project Page](https://www.hackster.io/david-hansel/dazzler-display-for-altair-simulator-3febc6) and the [Altair-Duino instructions](https://adwaterandstir.com/install/) for information on how to rebuild the firmware. Take note of the "config.h" options used in building the firmware to make sure you retain your existing functionality.
 
 Make sure you go into the simulator's configuration menu and configure the Dazzler to use the Native USB Port.
 
@@ -77,7 +77,7 @@ Connect the VGA cable to the monitor.<br>
 You are done!
 
 The Pico is powered by the Arduino Due's USB port, in the same way as the PIC32 version. The 4-port USB-3 hub I used passes through the power 
-from the USB device port from the Due to the Pico, but I'm not sure if all Hubs have that feature. 
+from the USB device port from the Due to the Pico, but I'm not sure if all Hubs have that feature. If your hub doesn't, the USB micro port on the PIMORONI board accepts an external 5V power supply. I suggest you build a USB micro power cable and find a nice place to tap into 5 volts.
 
 While you can power the whole system via the USB input to the Altair Duino, and I've not had any problems doing this, I'd suggest using the external
 power supply, just to be safe on power limits.
@@ -107,11 +107,32 @@ The last 2 programs are also contained on the Dazzler CPM disk shipped with the 
 Before reporting an issue, please test the program on David's [Windows client](https://github.com/dhansel/Dazzler/tree/master/Windows) if possible. A lot of the Dazzler programs either work in unintuitive ways, or have been crudely ported to CPM and may not work with your particular CPM version or configuration.
 
 # Performance
-[ Stats to come ]
+
 For almost all uses, the PICO will provide native-speed performance. However, I've found 2 issues:
 1. The USB Host implementation on the Pico cannot read data at full speed. For fast updates to the video memory, the Pico may cause slowdowns. 
-I've not found this to be noticeable in any real-world applications.
+I've not found this to be noticeable, except in BARPLOT, which changes the video mode and video memory adress on each frame.
 2. The SOUNDF.COM application can produce audio faster than the 48kHz sampling rate implemented. You will get some occasional pops at the highest frequencies.
+
+## Performance Testing Results
+The results below are from a test program that updates the full 2k of video ram with an alternating pattern in a tight loop, as fast as possible. 
+This test represents the absolute worst-case scenario.
+
+| Scenario                                   | Average Time    |
+| ------------------------------------------ | --------------- |
+| Windows Client                             |             19s |
+| Pico only reading USB with no processing   |             45s |
+| Pico Dazzler with full processing          |             46s |
+| GDEMO.COM (Windows Client)                 |            1:50 |
+| GDEMO.COM (Pico Dazzler)                   |            1:50 |
+
+As can be seen above, the bottleneck is the USB host receive rate on the Pico.<br>
+From preliminary investigations, it doesn't look like there is any software solution to this. The Pico should be more than capable of handling the data rate, and more 
+investigation is necessary. The rest of the Pico Dazzler firmware adds negligible overhead.
+
+In real-world applications it is rare that this speed difference will make any difference as the application spends more time calculating than updating the video ram.
+The Kaleidoscope does run slightly slower and Barplot, which alternates between video ram addresses on each frame (requiring a full refresh of the video ram), shows a lot of flicker.
+
+Outside of that I haven't seen any practical issues. Noteably GDEMO.COM, the Dazzler Demo program, runs in exactly the same amount of time as the Windows client.
 
 # Debug Output
 
@@ -129,3 +150,4 @@ Debug output should not really be necessary, but will be handy if you run into i
 2. Change the I2S audio PIO assembly to repeat the current sample, rather than needing a new value supplied at a constant 48kHz. This could allow us to support higher sampling rates and eliminate the audio queue overflows at high frequencies.
 3. Investigate issue with bottom line of VGA displaying "random" data. This is likely due to a bug in the scanline video sdk when scaling to 1024x768.
 4. Support USB keyboard devices as some programs expect input from a Cromemeco serial board, rather than the emulated SIO ports.
+5. Implement double-buffering, which might help programs like BARPLOT, which alternates the graphics mode and vram address on each frame.
