@@ -115,6 +115,9 @@ enum { mode_32x32c, mode_64x64m, mode_64x64c, mode_128x128m } video_mode = mode_
 #define DPC_COLOUR      0x10
 #define DPC_FOREGROUND  0x0F
 
+/* Bitmasks for DAZ_CTRL */
+#define DC_ON           0x80
+
 /* 16 colours used in colour mode */
 uint16_t    colours[NUMCLR] =
 {
@@ -188,7 +191,9 @@ uint active_frame_buffer = 0;
  * First 2 framebuffers are for dual buffering. The 3rd is a blank framebuffer
  * for when the Dazzler is turned off.
  */
-uint16_t frame_buffers[3][WIDTH * HEIGHT];   
+uint16_t frame_buffers[3][WIDTH * (HEIGHT + 1)];    
+/* Note: Temporarilt add one extra blank line to work around bug in scnaline library, which
+ * seems to be displaying hte last VGA line from off the end of the frame buffer */
 
 /* 
  * This is a copy of the Altair's video ram. We need a copy of this because:
@@ -344,8 +349,16 @@ void __time_critical_func(render_loop) (void)
         int scanline = scanvideo_scanline_number(buffer->scanline_id);
         if (scanline == 0)
         {
-            /* Draw a full frame before swapping frame buffers */
-            display_frame_buffer = active_frame_buffer;
+            if (dazzler_ctrl & DC_ON)
+            {
+                /* Draw a full frame before swapping frame buffers */
+                display_frame_buffer = active_frame_buffer;
+            }
+            else
+            {
+                /* Dazzler is off, display from "bank" framebuffer */
+                display_frame_buffer = 2;
+            }
         }
         uint32_t *vga_buf = buffer->data + 1;
         uint16_t *frame_buf = &frame_buffers[display_frame_buffer][scanline * WIDTH];
@@ -401,7 +414,7 @@ void setup_video(void)
  * Framebuffer manipulation routines                         *
  *************************************************************/
 
-/* Set active framebuffer to 0/1 for dual buf, 2 for blank*/
+/* Set active framebuffer to 0/1 for dual buf */
 void set_active_framebuffer(int frame_buffer_nr)
 {
     PRINT_INFO("Setting Active Framebuffer to %d\n", active_frame_buffer);
@@ -674,19 +687,17 @@ void process_usb_commands()
                     dazzler_ctrl = (uint8_t) usb_getbyte_blocking();
                     if (dazzler_ctrl != prev_dazzler_ctrl)
                     {
-                        PRINT_INFO("DAZ_CTRL ON\n");
-
                         /* If Dazzler is turned on */
-                        if (dazzler_ctrl & 0x80)
+                        if (dazzler_ctrl & DC_ON)
                         {
+                            PRINT_INFO("DAZ_CTRL ON\n");
+
                             /* Set framebuffer to 1 or 2 */
                             set_active_framebuffer(dazzler_ctrl & 0x01);
                         }
                         else /* Dazzler turned off */
                         {
                             PRINT_INFO("DAZ_CTRL OFF\n");
-                            /* Set to 2 to blank the display */
-                            set_active_framebuffer(2);
                         }
                     }
                 }
