@@ -27,7 +27,7 @@
 /*****************************************************************************
  * PICO DAZZLER
  *
- * Cromemco Dazzler emulation using Raspberry Pi PICO
+ * Cromemco Dazzler emulation using Raspberry Pi Pico
  * 
  *****************************************************************************/
 
@@ -85,13 +85,14 @@
 #define DAZZLER_VERSION 0x02
 
 
-void set_vram(int addr, uint8_t value, bool refresh);
-void refresh_vram(void);
+void set_vram(int buffer_nr, int addr, uint8_t value, bool refresh);
+void refresh_vram(int buffer_nr);
 
 /*
  * Dazzler control register:
  * D7: on/off
  * D6-D0: screen memory location (not used in client)
+ * D0: Selects the active frame buffer.
  */ 
 uint8_t dazzler_ctrl = 0x00;
 /* 
@@ -113,6 +114,9 @@ enum { mode_32x32c, mode_64x64m, mode_64x64c, mode_128x128m } video_mode = mode_
 #define DPC_MEMORY      0x20
 #define DPC_COLOUR      0x10
 #define DPC_FOREGROUND  0x0F
+
+/* Bitmasks for DAZ_CTRL */
+#define DC_ON           0x80
 
 /* 16 colours used in colour mode */
 uint16_t    colours[NUMCLR] =
@@ -174,11 +178,22 @@ const scanvideo_mode_t vga_mode_128x128 =
     .yscale = 6,
 };
 
-/* 
- * Framebuffer with 16 bits per pixel as the scanline vga library uses
- * 16 bits per pixel colour.
+/* The Altair Duino supports 2 frame buffers for optimisation
+ * Some programs quickly cycle between two vram addresses and 
+ * having 2 frame buffers saves having to resend a full frame 
+ * of data on each cycle.
  */
-uint16_t frame_buffer[WIDTH * HEIGHT];
+/* The frame_buffer to generate VGA from (0 or 1)*/
+uint active_frame_buffer = 0;
+/* 
+ * Framebuffers with 16 bits per pixel as the scanline vga library uses
+ * 16 bits per pixel colour.
+ * First 2 framebuffers are for dual buffering. The 3rd is a blank framebuffer
+ * for when the Dazzler is turned off.
+ */
+uint16_t frame_buffers[3][WIDTH * (HEIGHT + 1)];    
+/* Note: Temporarilt add one extra blank line to work around bug in scnaline library, which
+ * seems to be displaying hte last VGA line from off the end of the frame buffer */
 
 /* 
  * This is a copy of the Altair's video ram. We need a copy of this because:
@@ -186,7 +201,7 @@ uint16_t frame_buffer[WIDTH * HEIGHT];
  * 2) The Altair-duino dazzler code oftens sends the video ram bytes before the video mode, and need to
  *    refresh the scanvideo framebuffer whenever the video mode changes.
  */
-uint8_t raw_frame[2048];
+uint8_t raw_frames[2][2048];
 
 /*************************************************************
  * USB Serial port handling                                  *
@@ -276,15 +291,15 @@ void tuh_cdc_mount_cb(uint8_t idx)
     tuh_cdc_itf_info_t itf_info = { 0 };
     tuh_cdc_itf_get_info(idx, &itf_info);
     
-    printf("CDC Interface is mounted: address = %u, itf_num = %u\r\n", itf_info.daddr, itf_info.bInterfaceNumber);
+    printf("CDC Interface is mounted: address = %u, itf_num = %u\n", itf_info.daddr, itf_info.bInterfaceNumber);
 
 #ifdef CFG_TUH_CDC_LINE_CODING_ON_ENUM
-  // CFG_TUH_CDC_LINE_CODING_ON_ENUM must be defined for line coding is set by tinyusb in enumeration
+    /* CFG_TUH_CDC_LINE_CODING_ON_ENUM must be defined to set correct Baud Rate / Stop bits and Parity */
     cdc_line_coding_t line_coding = { 0 };
     if ( tuh_cdc_get_local_line_coding(idx, &line_coding) )
     {
-        printf("  Baudrate: %lu, Stop Bits : %u\r\n", line_coding.bit_rate, line_coding.stop_bits);
-        printf("  Parity  : %u, Data Width: %u\r\n", line_coding.parity  , line_coding.data_bits);
+        printf("  Baudrate: %lu, Stop Bits : %u\n", line_coding.bit_rate, line_coding.stop_bits);
+        printf("  Parity  : %u, Data Width: %u\n", line_coding.parity  , line_coding.data_bits);
     }
 #endif
 }
@@ -295,19 +310,19 @@ void tuh_cdc_umount_cb(uint8_t idx)
     tuh_cdc_itf_info_t itf_info = { 0 };
     tuh_cdc_itf_get_info(idx, &itf_info);
 
-    printf("CDC Interface is unmounted: address = %u, itf_num = %u\r\n", itf_info.daddr, itf_info.bInterfaceNumber);
+    printf("CDC Interface is unmounted: address = %u, itf_num = %u\n", itf_info.daddr, itf_info.bInterfaceNumber);
 }
 
 /* Callback when a USB device is mounted */
 void tuh_mount_cb(uint8_t dev_addr)
 {
-    printf("A device with address %d is mounted\r\n", dev_addr);
+    printf("A device with address %d is mounted\n", dev_addr);
 }
 
 /* Callback when a USB device is unmounted */
 void tuh_umount_cb(uint8_t dev_addr)
 {
-    printf("A device with address %d is unmounted \r\n", dev_addr);
+    printf("A device with address %d is unmounted \n", dev_addr);
 }
 
 
@@ -318,21 +333,35 @@ void tuh_umount_cb(uint8_t dev_addr)
 /*
  * Renders a line of video. (Runs as dedicated loop on second core)
  * 
- * Uses the COMPOSABLE_RAW_RUN rendering method, which has the byte format
+ * Uses the COMPOSABLE_RAW_RUN rendering method, which has the word format:
  * COMPOSABLE_RAW_RUN | colour0 | num 32 bit words | colour1 .... colour n | COMPOSABLE_EOL_ALIGN
  * Colours from the line being processed are copied from the frame_buffer into the scan line
  */
 volatile bool send_vsync = false;
 void __time_critical_func(render_loop) (void)
 {
+    static int display_frame_buffer = 0;
     PRINT_INFO("Starting render\n");
     while(true)
     {
         /* Wait for ready to render next scanline */
         struct scanvideo_scanline_buffer *buffer = scanvideo_begin_scanline_generation(true);
-        int scanline = scanvideo_scanline_number (buffer->scanline_id);
+        int scanline = scanvideo_scanline_number(buffer->scanline_id);
+        if (scanline == 0)
+        {
+            if (dazzler_ctrl & DC_ON)
+            {
+                /* Draw a full frame before swapping frame buffers */
+                display_frame_buffer = active_frame_buffer;
+            }
+            else
+            {
+                /* Dazzler is off, display from "bank" framebuffer */
+                display_frame_buffer = 2;
+            }
+        }
         uint32_t *vga_buf = buffer->data + 1;
-        uint16_t *frame_buf = &frame_buffer[scanline * WIDTH];
+        uint16_t *frame_buf = &frame_buffers[display_frame_buffer][scanline * WIDTH];
 
         /* Copy colours from framebuffer into scanline buffer */
         memcpy(vga_buf, frame_buf, WIDTH * 2);
@@ -347,12 +376,12 @@ void __time_critical_func(render_loop) (void)
         buffer->data_used = (WIDTH + 4) / 2;
 
         /* render video scanline */
-        scanvideo_end_scanline_generation (buffer);
+        scanvideo_end_scanline_generation(buffer);
     }
 }
 
 /* Handle VSYNC */
-const uint VSYNC_PIN = PICO_SCANVIDEO_COLOR_PIN_BASE + PICO_SCANVIDEO_COLOR_PIN_COUNT + 1;
+static const uint VSYNC_PIN = PICO_SCANVIDEO_COLOR_PIN_BASE + PICO_SCANVIDEO_COLOR_PIN_COUNT + 1;
 void vga_irq_handler() {
     int vsync_current_level = gpio_get(VSYNC_PIN);
 
@@ -385,12 +414,19 @@ void setup_video(void)
  * Framebuffer manipulation routines                         *
  *************************************************************/
 
+/* Set active framebuffer to 0/1 for dual buf */
+void set_active_framebuffer(int frame_buffer_nr)
+{
+    PRINT_INFO("Setting Active Framebuffer to %d\n", active_frame_buffer);
+    active_frame_buffer = frame_buffer_nr;
+}
+
 /*
  * The following routines set a pixel into the frame_buffer at different resolutions.
  * AThe framebuffer is kept at a fixed 128x128 resolutions, and lower resolutions set
  * multiple pixels for this resolution.
  */
-void set_pixel_128(int x, int y, int colour)
+void set_pixel_128(uint16_t* frame_buffer, int x, int y, int colour)
 {
     colour &= 0x0F;
     if (x >= 0 && x < WIDTH && y >=0 && y < HEIGHT)
@@ -399,7 +435,7 @@ void set_pixel_128(int x, int y, int colour)
     }
 }
 
-void set_pixel_64(int x, int y, int colour)
+void set_pixel_64(uint16_t *frame_buffer, int x, int y, int colour)
 {
     PRINT_TRACE("x = %d, y = %d, Colour = %x, %x\n", x, y, colour, clr_table[colour]);
 
@@ -417,7 +453,7 @@ void set_pixel_64(int x, int y, int colour)
     }
 }
 
-void set_pixel_32(int x, int y, int colour)
+void set_pixel_32(uint16_t *frame_buffer, int x, int y, int colour)
 {
     x = x * 4;
     y = y * 4;
@@ -452,16 +488,20 @@ void set_pixel_32(int x, int y, int colour)
  * If called with refresh=true, only set frame_buffer
  * refresh mode is used when video mode changes to set the
  * frame buffer from the current raw_frame contents */
-void set_vram(int addr, uint8_t value, bool refresh)
+void set_vram(int buffer_nr, int addr, uint8_t value, bool refresh)
 {
     PRINT_TRACE("set_vram(%d,%x, %d)\n", addr, value, refresh);
     /* raw_frame stores a copy of the Dazzler video ram. 
-     * When setting ram values, copy into the raw_frame and vga framebuffer
+     * When setting ram values, copy into both the raw_frame and vga framebuffer
      * refresh is set when refreshing vga framebuffer from raw_frame. So don't need to set
      * raw_frame in that case
      */
+    uint16_t *frame_buffer = frame_buffers[buffer_nr];
     if (!refresh)
+    {
+        uint8_t *raw_frame = raw_frames[buffer_nr];
         raw_frame[addr] = value;
+    }
 
     int x, y;
 
@@ -499,14 +539,14 @@ void set_vram(int addr, uint8_t value, bool refresh)
              * | D0 | D1 | D4 | D5 |
              * | D2 | D3 | D6 | D7 | 
              */
-            set_pixel_128(x, y, (value & 0x01) ? mono_clr : 0);
-            set_pixel_128(x + 1, y, (value & 0x02) ? mono_clr : 0);
-            set_pixel_128(x, y + 1, (value & 0x04) ? mono_clr : 0);
-            set_pixel_128(x + 1, y + 1, (value & 0x08) ? mono_clr : 0);
-            set_pixel_128(x + 2, y, (value & 0x10) ? mono_clr : 0);
-            set_pixel_128(x + 3, y, (value & 0x20) ? mono_clr : 0);
-            set_pixel_128(x + 2, y + 1, (value & 0x40) ? mono_clr : 0);
-            set_pixel_128(x + 3, y + 1, (value & 0x80) ? mono_clr : 0);
+            set_pixel_128(frame_buffer ,x, y, (value & 0x01) ? mono_clr : 0);
+            set_pixel_128(frame_buffer ,x + 1, y, (value & 0x02) ? mono_clr : 0);
+            set_pixel_128(frame_buffer ,x, y + 1, (value & 0x04) ? mono_clr : 0);
+            set_pixel_128(frame_buffer ,x + 1, y + 1, (value & 0x08) ? mono_clr : 0);
+            set_pixel_128(frame_buffer ,x + 2, y, (value & 0x10) ? mono_clr : 0);
+            set_pixel_128(frame_buffer ,x + 3, y, (value & 0x20) ? mono_clr : 0);
+            set_pixel_128(frame_buffer ,x + 2, y + 1, (value & 0x40) ? mono_clr : 0);
+            set_pixel_128(frame_buffer ,x + 3, y + 1, (value & 0x80) ? mono_clr : 0);
             break;
         }
         case mode_64x64m:
@@ -516,14 +556,14 @@ void set_vram(int addr, uint8_t value, bool refresh)
 
             /* If bit is set, set pixel to foreground colour, otherwise set to black */
             /* Pixel layout is the same as 128x128m mode */
-            set_pixel_64(x, y, (value & 0x01) ? mono_clr : 0);
-            set_pixel_64(x + 1, y, (value & 0x02) ? mono_clr : 0);
-            set_pixel_64(x, y + 1, (value & 0x04) ? mono_clr : 0);
-            set_pixel_64(x + 1, y + 1, (value & 0x08) ? mono_clr : 0);
-            set_pixel_64(x + 2, y, (value & 0x10) ? mono_clr : 0);
-            set_pixel_64(x + 3, y, (value & 0x20) ? mono_clr : 0);
-            set_pixel_64(x + 2, y + 1, (value & 0x40) ? mono_clr : 0);
-            set_pixel_64(x + 3, y + 1, (value & 0x80) ? mono_clr : 0);
+            set_pixel_64(frame_buffer, x, y, (value & 0x01) ? mono_clr : 0);
+            set_pixel_64(frame_buffer, x + 1, y, (value & 0x02) ? mono_clr : 0);
+            set_pixel_64(frame_buffer, x, y + 1, (value & 0x04) ? mono_clr : 0);
+            set_pixel_64(frame_buffer, x + 1, y + 1, (value & 0x08) ? mono_clr : 0);
+            set_pixel_64(frame_buffer, x + 2, y, (value & 0x10) ? mono_clr : 0);
+            set_pixel_64(frame_buffer, x + 3, y, (value & 0x20) ? mono_clr : 0);
+            set_pixel_64(frame_buffer, x + 2, y + 1, (value & 0x40) ? mono_clr : 0);
+            set_pixel_64(frame_buffer, x + 3, y + 1, (value & 0x80) ? mono_clr : 0);
             break;        
         }
         case mode_64x64c:
@@ -549,8 +589,8 @@ void set_vram(int addr, uint8_t value, bool refresh)
                 x = ((addr - 1536) * 2 % 32) + 32;
             }
             /* Each byte contains 2 pixels */
-            set_pixel_64(x + 0, y, value & 0x0F);
-            set_pixel_64(x + 1, y, value >> 4);
+            set_pixel_64(frame_buffer, x + 0, y, value & 0x0F);
+            set_pixel_64(frame_buffer, x + 1, y, value >> 4);
             break;
         }
         case mode_32x32c:
@@ -558,22 +598,22 @@ void set_vram(int addr, uint8_t value, bool refresh)
             int y = addr * 2 / 32;
             int x = (addr * 2) % 32;
             /* Each byte contains 2 pixels */
-            set_pixel_32(x + 0, y, value & 0x0F);
-            set_pixel_32(x + 1, y, value >> 4);
+            set_pixel_32(frame_buffer, x + 0, y, value & 0x0F);
+            set_pixel_32(frame_buffer, x + 1, y, value >> 4);
             break;
         }
     }
 }
 
 /* Used when changing video modes to copy from raw_frame into frame_buffer with the new mode */
-void refresh_vram()
+void refresh_vram(int buffer_nr)
 {
+    uint8_t *raw_frame = raw_frames[buffer_nr];
     for (int i = 0 ; i < 2048 ; i++)
     {
-        set_vram(i, raw_frame[i], false);
+        set_vram(buffer_nr, i, raw_frame[i], false);
     }
 }
-
 
 /*************************************************************
  * Main processing loop for USB                              *
@@ -584,11 +624,12 @@ void refresh_vram()
  */
 void process_usb_commands()
 {
+#if 0
     const uint LED_PIN = PICO_DEFAULT_LED_PIN;
     gpio_init(LED_PIN);
     gpio_set_dir(LED_PIN, GPIO_OUT);
     int led_status = 0;
-
+#endif
     absolute_time_t abs_time = get_absolute_time();
     /* poll joystick ~60 times per second */
     absolute_time_t joy_poll_time = make_timeout_time_ms(JOY_POLL_MS);
@@ -624,18 +665,14 @@ void process_usb_commands()
         /* Otherwise service the USB serial */
         c = usb_getbyte();
    
-        /* TODO: Implement LED flashing algo */
-//        led_status = (to_ms_since_boot(abs_time) / 50) % 2;
-//        gpio_put(LED_PIN, led_status);
-
         switch (c & 0xF0)
         {
             case DAZ_VERSION:
             {
-                PRINT_INFO("VERSION\r\n");
+                PRINT_INFO("VERSION\n");
                 static uint8_t buf[3];
                 buf[0] = DAZ_VERSION | (DAZZLER_VERSION & 0x0F);
-                buf[1] = FEAT_VIDEO | FEAT_FRAMEBUF | FEAT_JOYSTICK | FEAT_DAC | FEAT_VSYNC;
+                buf[1] = FEAT_VIDEO | FEAT_DUAL_BUF | FEAT_JOYSTICK | FEAT_DAC | FEAT_VSYNC;
                 buf[2] = 0;
                 usb_send_bytes(buf, 3);
 
@@ -643,28 +680,24 @@ void process_usb_commands()
             }
             case DAZ_CTRL:
             {
-                
-                PRINT_INFO("DAZ_CTRL\r\n");
+                PRINT_INFO("DAZ_CTRL\n");
                 if ((c & 0x0F) == 0)
                 {
                     uint8_t prev_dazzler_ctrl = dazzler_ctrl;
                     dazzler_ctrl = (uint8_t) usb_getbyte_blocking();
                     if (dazzler_ctrl != prev_dazzler_ctrl)
                     {
-                        PRINT_INFO("DAZ_CTRL ON\r\n");
-
                         /* If Dazzler is turned on */
-                        if (dazzler_ctrl & 0x80)
+                        if (dazzler_ctrl & DC_ON)
                         {
-                            PRINT_INFO("DAZ_CTRL REFRESH\r\n");
-                            refresh_vram();
-                            PRINT_INFO("DAZ_CTRL REFRESH DONE\r\n");
+                            PRINT_INFO("DAZ_CTRL ON\n");
+
+                            /* Set framebuffer to 1 or 2 */
+                            set_active_framebuffer(dazzler_ctrl & 0x01);
                         }
                         else /* Dazzler turned off */
                         {
-                            PRINT_INFO("DAZ_CTRL OFF\r\n");
-                            /* blank screen */
-                            memset(frame_buffer, 0, sizeof(frame_buffer));
+                            PRINT_INFO("DAZ_CTRL OFF\n");
                         }
                     }
                 }
@@ -672,7 +705,7 @@ void process_usb_commands()
             }
             case DAZ_CTRLPIC:
             {
-                PRINT_INFO("DAZ_CTRLPIC\r\n");
+                PRINT_INFO("DAZ_CTRLPIC\n");
                 uint8_t prev_picture_ctrl = dazzler_picture_ctrl;
 
                 if ((c & 0x0F) == 0)
@@ -695,33 +728,34 @@ void process_usb_commands()
 
                         clr_table = (dazzler_picture_ctrl & DPC_COLOUR) ? colours : greys;
     
-                        refresh_vram();
+                        refresh_vram(active_frame_buffer);
                     }
                 }
                 break;
             }
             case DAZ_MEMBYTE:
             {
-                PRINT_INFO("DAZ_MEMBYTE\r\n");
 
-                int addr = (c & 0x0F) * 256 + (uint8_t) usb_getbyte_blocking();
+                int buffer_nr = (c & 0x08) ? 1 : 0;
+                int addr = (c & 0x07) * 256 + (uint8_t) usb_getbyte_blocking();
                 uint8_t value = (uint8_t) usb_getbyte_blocking();
-                set_vram(addr, value, false);
+                PRINT_INFO("DAZ_MEMBYTE %d, %d, %x\n", buffer_nr, addr, value);
+                set_vram(buffer_nr, addr, value, false);
                 break;
             }
             case DAZ_FULLFRAME:
             {
-                PRINT_INFO("DAZ_FULLFRAME\r\n");
+                PRINT_INFO("DAZ_FULLFRAME\n");
                 if((c & 0x06) == 0)
                 {
-                    int addr = (c & 0x08) * 256;
+                    int buffer_nr  = (c & 0x08) ? 1 : 0;
                     int count = (c & 0x01) ? 2048 : 512;
-                    PRINT_TRACE("DAZ_FULLFRAME %d, %d\r\n", addr, count);
+                    PRINT_INFO("DAZ_FULLFRAME %d, %d\n", buffer_nr, count);
                     for (int i = 0 ; i < count ; i++)
                     {
-                        PRINT_TRACE("DAZ_FULLFRAME %d\r\n", i);
+                        PRINT_TRACE("DAZ_FULLFRAME value %d\n", i);
                         uint8_t value = (uint8_t) usb_getbyte_blocking();
-                        set_vram(addr + i, value, false);
+                        set_vram(buffer_nr, i, value, false);
                     }
                 }
                 break;
@@ -761,34 +795,18 @@ int main(void)
     const uint LED_PIN = PICO_DEFAULT_LED_PIN;
     gpio_init(LED_PIN);
     gpio_set_dir(LED_PIN, GPIO_OUT);
-    int led_status = 1;
 
-    gpio_put(LED_PIN, led_status);
-    memset(frame_buffer, 0, sizeof(frame_buffer));
+    /* Turn on LED to indicate sucessful initialization */
+    gpio_put(LED_PIN, 1);
+    memset(frame_buffers, 0, sizeof(frame_buffers));
 
     sleep_ms(1000);
     
+    /* Start VGA rendering */
     multicore_launch_core1(core1_main);
-#ifdef AUDIO_TEST
-    int timeout = 2336;
-    absolute_time_t sample_time = make_timeout_time_us(timeout);
-    int samples[2] = { 0x7f, 0x81 };
-    int sample_nr = 0;
-    while (true) {
-        for (int i = 0 ; i < 500 ; i++)
-        {
-            absolute_time_t abs_time = get_absolute_time();        
-            if(absolute_time_diff_us(sample_time, abs_time) >= 0)
-            {
-                audio_add_sample(0, 50, samples[sample_nr]);
-                sample_nr ^= 1;
-                sample_time = make_timeout_time_us(timeout);
-            }
-        }
-    }
-#endif
 
     printf("READY\n");
+    /* Start accepting Dazzler commands from Altair-Duino */
     process_usb_commands();
 }
 
