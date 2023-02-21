@@ -183,10 +183,12 @@ const scanvideo_mode_t vga_mode_128x128 =
 /* The frame_buffer to generate VGA from (0 or 1)*/
 uint active_frame_buffer = 0;
 /* 
- * Framebuffer with 16 bits per pixel as the scanline vga library uses
+ * Framebuffers with 16 bits per pixel as the scanline vga library uses
  * 16 bits per pixel colour.
+ * First 2 framebuffers are for dual buffering. The 3rd is a blank framebuffer
+ * for when the Dazzler is turned off.
  */
-uint16_t frame_buffers[2][WIDTH * HEIGHT];   
+uint16_t frame_buffers[3][WIDTH * HEIGHT];   
 
 /* 
  * This is a copy of the Altair's video ram. We need a copy of this because:
@@ -399,7 +401,7 @@ void setup_video(void)
  * Framebuffer manipulation routines                         *
  *************************************************************/
 
-/* Set active framebuffer to 0/1 */
+/* Set active framebuffer to 0/1 for dual buf, 2 for blank*/
 void set_active_framebuffer(int frame_buffer_nr)
 {
     PRINT_INFO("Setting Active Framebuffer to %d\n", active_frame_buffer);
@@ -677,17 +679,14 @@ void process_usb_commands()
                         /* If Dazzler is turned on */
                         if (dazzler_ctrl & 0x80)
                         {
-                            PRINT_TRACE("DAZ_CTRL REFRESH\n");
-                            refresh_vram(active_frame_buffer);
-                            PRINT_TRACE("DAZ_CTRL REFRESH DONE\n");
+                            /* Set framebuffer to 1 or 2 */
                             set_active_framebuffer(dazzler_ctrl & 0x01);
                         }
                         else /* Dazzler turned off */
                         {
                             PRINT_INFO("DAZ_CTRL OFF\n");
-//                            set_active_framebuffer(dazzler_ctrl & 0x01);
-                            /* blank screen */
-                            memset(frame_buffers, 0, sizeof(frame_buffers));
+                            /* Set to 2 to blank the display */
+                            set_active_framebuffer(2);
                         }
                     }
                 }
