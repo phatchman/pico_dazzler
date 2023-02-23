@@ -142,6 +142,8 @@ The port is set to 112500 8 N 1. And you should connect GP21 to TX, GP20 to RX a
 
 Debug output should not really be necessary, but will be handy if you run into issues with your USB hub or controller.
 
+Very minimal information is output by default. But you can change the debug options by editing the CMakeLists.txt file and changing the XXX_DEBUG and XXX_TRACE values to 1 for the relevant module.
+
 # Known Issues
 1. The bottom line of the VGA displays "garbage" data. This is likely a bug in the Pico's scanline video SDK, but I've not investigated yet.
 
