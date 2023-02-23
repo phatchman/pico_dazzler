@@ -34,6 +34,8 @@
 #define DAZ_KEY     0x30
 void usb_send_bytes(uint8_t *buf, int count);
 
+/* TODO: Handle CAPS LOCK */
+
 /*--------------------------------------------------------------------
  * KEYCODE to Ascii Conversion
  * Expand to array of [128][3] (ascii without shift, with shift, with ctrl)
