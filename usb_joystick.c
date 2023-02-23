@@ -21,6 +21,14 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+
+/* TODO: There is some issue if the keyboard is detected before the PS3 controller 
+ * which does not occur with my non-PS3 controller
+ * The wrong descriptor seems to be passed in to the mounted callback. It's not a valid
+ * HID desciptor, so the PS3 isn't detected as a joystick. The workaround is to plug the PS3
+ * controller into an earlier port than the keyboard.
+ * Proably a bug in TinyUSB?
+ */
 #include "usb_joystick.h"
 #include "bsp/board.h"
 #include "tusb.h"
@@ -65,15 +73,6 @@ void joy_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_re
 
     printf("Instance = %d, VID = %04x, PID = %04x\n", instance, vid, pid);
 
-#if DEBUG_INFO > 0
-    for (int i = 0 ; i < desc_len ; i++)
-    {
-        printf("%02X ", desc_report[i]);
-        if ((i % 20) == 19) printf("\n");
-    }
-    printf("\n");
-#endif
-
     if (!memcmp(desc_report, joystick_hid, sizeof (joystick_hid)) ||
         !memcmp(desc_report, gamepad_hid, sizeof (gamepad_hid)))
     {
@@ -99,6 +98,8 @@ void joy_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_re
                         hid_report_status = -1;
                         tuh_hid_set_report(dev_addr, instance, 0xF4, 
                                             HID_REPORT_TYPE_FEATURE, cmd_buf, sizeof(cmd_buf));
+#if 0       /* Waiting for the report result causes issues when keyboard was added and get 
+             * a Data Sequence error. Not clear why. But no real need to wait for the report result.
                         while (hid_report_status == -1)
                         {
                             /* wait for response from set report*/
@@ -108,6 +109,7 @@ void joy_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_re
                         {
                             printf ("ERROR configuring PS3 controller\n");
                         }
+#endif
                     }
                 }
                 else
