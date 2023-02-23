@@ -43,8 +43,7 @@ static usb_joystick joysticks[2];
 static uint16_t hid_report_status = -1;
 
 void usb_send_bytes(uint8_t *buf, int count);
-void process_joy_input(int joynum, usb_joystick* joy);
-bool tuh_hid_receive_report(uint8_t dev_addr, uint8_t instance);
+static void joy_process_input(int joynum, usb_joystick* joy);
 
 /* Return true if PS3 controller is connected. This controller needs 
  * additional USB commands to enable it */
@@ -53,8 +52,9 @@ bool is_ps3_controller(uint16_t pid)
     return (pid == 0x0268);
 }
 
-/* Callback when Invoked when device with hid interface is mounted */
-void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_report, uint16_t desc_len)
+/* Callback when Invoked when device with hid interface type of "None" is mounted
+ * Check if this is a joystick or gamepad and initialize it */
+void joy_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_report, uint16_t desc_len)
 {
     uint16_t vid, pid;
     tuh_vid_pid_get(dev_addr, &vid, &pid);
@@ -63,16 +63,15 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_re
     uint8_t joystick_hid[4] = { 0x05, 0x01, 0x09, 0x04 };
     uint8_t gamepad_hid[4] = { 0x05, 0x01, 0x09, 0x05 };
 
-    printf("HID device address = %d, instance = %d is mounted\r\n", dev_addr, instance);
-    printf("Instance = %d, VID = %04x, PID = %04x\r\n", instance, vid, pid);
+    printf("Instance = %d, VID = %04x, PID = %04x\n", instance, vid, pid);
 
-#if DEBUG_TRACE > 0
+#if DEBUG_INFO > 0
     for (int i = 0 ; i < desc_len ; i++)
     {
         printf("%02X ", desc_report[i]);
-        if ((i % 20) == 19) printf("\r\n");
+        if ((i % 20) == 19) printf("\n");
     }
-    printf("\r\n");
+    printf("\n");
 #endif
 
     if (!memcmp(desc_report, joystick_hid, sizeof (joystick_hid)) ||
@@ -122,9 +121,8 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_re
 }
 
 /* Invoked when device with hid interface is un-mounted */
-void tuh_hid_umount_cb(uint8_t dev_addr, uint8_t instance)
+void joy_hid_unmount_cb(uint8_t dev_addr, uint8_t instance)
 {
-  printf("HID device address = %d, instance = %d is unmounted\r\n", dev_addr, instance);
   for (int i = 0 ; i < 2 ; i++)
   {
     if (joysticks[i].dev_addr == dev_addr && joysticks[i].instance == instance)
@@ -138,9 +136,9 @@ void tuh_hid_umount_cb(uint8_t dev_addr, uint8_t instance)
 
 
 /* Invoked when received report from device via interrupt endpoint */
-void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* report, uint16_t len)
+void joy_process_hid_report(uint8_t dev_addr, uint8_t instance, uint8_t const* report, uint16_t len)
 {
-    PRINT_TRACE("tuh_hid_report_received_cb\n");
+    PRINT_TRACE("process_joystick_report\n");
     static absolute_time_t swap_time;
     static int swapping_joy = -1;   /* Joystick no that is initiating swap */
     static bool swapped = false;    /* True if swapped, but buttons not yet released */
@@ -167,7 +165,7 @@ void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t cons
                 joy->b3 = buttons & joy->offsets.b3_mask;
                 joy->b4 = buttons & joy->offsets.b4_mask;
             
-                process_joy_input(i, &joysticks[i]);
+                joy_process_input(i, &joysticks[i]);
                 joysticks[i].prev_x = report[joysticks[i].offsets.x_axis_byte];
                 joysticks[i].prev_y = report[joysticks[i].offsets.y_axis_byte];
                 joysticks[i].prev_buttons = report[joysticks[i].offsets.buttons_byte];
@@ -198,10 +196,10 @@ void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t cons
                         {
                             memset(&joysticks[swapping_joy], 0, sizeof(usb_joystick));
                         }
-                        process_joy_input(swapping_joy, &joysticks[swapping_joy]);
+                        joy_process_input(swapping_joy, &joysticks[swapping_joy]);
                         swapping_joy = (swapping_joy == 0) ? 1 : 0;
                         /* Send update for initiating joystick */
-                        process_joy_input(swapping_joy, &joysticks[swapping_joy]);
+                        joy_process_input(swapping_joy, &joysticks[swapping_joy]);
                     }
                 }
             }
@@ -219,7 +217,7 @@ void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t cons
 /*
  * Request to receive a HID report from the joystick. 
  */
-void schedule_joy_input()
+void joy_schedule_hid_input(void)
 {
     for (int i = 0 ; i < 2 ; i++)
     {
@@ -242,7 +240,7 @@ void tuh_hid_set_report_complete_cb(uint8_t dev_addr, uint8_t instance, uint8_t 
 }
 
 
-uint8_t get_joy_value_x (uint8_t value)
+static uint8_t joy_get_value_x (uint8_t value)
 {
     int16_t sval = value;
     sval -= 127;
@@ -250,7 +248,7 @@ uint8_t get_joy_value_x (uint8_t value)
     return (uint8_t) sval;
 }
 
-uint8_t get_joy_value_y (uint8_t value)
+static uint8_t joy_get_value_y (uint8_t value)
 {
     int16_t sval = value;
     sval -= 127;
@@ -260,7 +258,7 @@ uint8_t get_joy_value_y (uint8_t value)
 }
 
 /* Send joystick input to Altair-duino */
-void process_joy_input(int joynum, usb_joystick* joy)
+static void joy_process_input(int joynum, usb_joystick* joy)
 {
     uint8_t daz_msg[3];
     daz_msg[0] = (joynum == 0) ? DAZ_JOY1 : DAZ_JOY2;
@@ -268,8 +266,8 @@ void process_joy_input(int joynum, usb_joystick* joy)
     if (!joy->b2) daz_msg[0] |= 2;
     if (!joy->b3) daz_msg[0] |= 4;
     if (!joy->b4) daz_msg[0] |= 8;
-    daz_msg[1] = get_joy_value_x(joy->x);
-    daz_msg[2] = get_joy_value_y(joy->y);
+    daz_msg[1] = joy_get_value_x(joy->x);
+    daz_msg[2] = joy_get_value_y(joy->y);
     
     PRINT_INFO("Joy = %d, X = %d, Y = %d, btn = %x, msg[0] = %02x\r\n", joynum, (int8_t) daz_msg[1], (int8_t) daz_msg[2], daz_msg[0] & 0x0F, daz_msg[0]);
     usb_send_bytes(daz_msg, 3);

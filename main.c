@@ -41,7 +41,7 @@
 #include "pico/multicore.h"
 #include "hardware/clocks.h"
 
-#include "usb_joystick.h"
+#include "hid_devices.h"
 #include "daz_audio.h"
 
 #include <string.h>
@@ -60,7 +60,7 @@
 #define HEIGHT  128
 #define NUMCLR  16
 
-#define JOY_POLL_MS   16    /* Poll the joysticks ~ 60 times per second */
+#define HID_POLL_MS   16    /* Poll the joysticks ~ 60 times per second */
 
 /* Dazzler packet types */
 #define DAZ_MEMBYTE   0x10
@@ -80,8 +80,8 @@
 #define FEAT_DUAL_BUF 0x04
 #define FEAT_VSYNC    0x08
 #define FEAT_DAC      0x10
+#define FEAT_KEYBOARD 0x20
 #define FEAT_FRAMEBUF 0x40
-
 #define DAZZLER_VERSION 0x02
 
 
@@ -632,7 +632,7 @@ void process_usb_commands()
 #endif
     absolute_time_t abs_time = get_absolute_time();
     /* poll joystick ~60 times per second */
-    absolute_time_t joy_poll_time = make_timeout_time_ms(JOY_POLL_MS);
+    absolute_time_t hid_poll_time = make_timeout_time_ms(HID_POLL_MS);
 
     uint8_t c = 0;
 
@@ -654,10 +654,10 @@ void process_usb_commands()
                 usb_send_bytes(&vsync, 1);
                 send_vsync = false;
             }
-            if (absolute_time_diff_us(joy_poll_time, abs_time) >= 0)
+            if (absolute_time_diff_us(hid_poll_time, abs_time) >= 0)
             {
-                schedule_joy_input();
-                joy_poll_time = make_timeout_time_ms(JOY_POLL_MS);
+                hid_schedule_device_poll();
+                hid_poll_time = make_timeout_time_ms(HID_POLL_MS);
             }
        	    tuh_task();
             continue;
@@ -672,7 +672,7 @@ void process_usb_commands()
                 PRINT_INFO("VERSION\n");
                 static uint8_t buf[3];
                 buf[0] = DAZ_VERSION | (DAZZLER_VERSION & 0x0F);
-                buf[1] = FEAT_VIDEO | FEAT_DUAL_BUF | FEAT_JOYSTICK | FEAT_DAC | FEAT_VSYNC;
+                buf[1] = FEAT_VIDEO | FEAT_DUAL_BUF | FEAT_JOYSTICK | FEAT_DAC | FEAT_VSYNC | FEAT_KEYBOARD;
                 buf[2] = 0;
                 usb_send_bytes(buf, 3);
 
@@ -697,6 +697,7 @@ void process_usb_commands()
                         }
                         else /* Dazzler turned off */
                         {
+                            /* The VGA rendering routine will blank screen on next frame */
                             PRINT_INFO("DAZ_CTRL OFF\n");
                         }
                     }

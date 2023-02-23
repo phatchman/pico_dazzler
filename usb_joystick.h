@@ -50,7 +50,12 @@ typedef struct
     struct  joystick_bytes offsets;
 } usb_joystick;
 
+/* Tiny USB Callbacks */
+void joy_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_report, uint16_t desc_len);
+void joy_hid_unmount_cb(uint8_t dev_addr, uint8_t instance);
+void joy_process_hid_report(uint8_t dev_addr, uint8_t instance, uint8_t const* report, uint16_t len);
+
 /* Poll usb for input */
-void schedule_joy_input();
+void joy_schedule_hid_input(void);
 
 #endif
