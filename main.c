@@ -107,7 +107,7 @@ uint8_t dazzler_picture_ctrl = 0x00;    /* normal res, 512 byte, b/w */
 /*
  * The current video mode, set by DAZ_CTRLPIC
  */
-enum { mode_32x32c, mode_64x64m, mode_64x64c, mode_128x128m } video_mode = mode_64x64m;
+enum vid_mode { mode_32x32c, mode_64x64m, mode_64x64c, mode_128x128m } video_mode = mode_64x64m;
 
 /* Bitmasks for dazzler_picture_ctrl */
 #define DPC_RESOLUTION  0x40
@@ -185,6 +185,11 @@ const scanvideo_mode_t vga_mode_128x128 =
  */
 /* The frame_buffer to generate VGA from (0 or 1)*/
 uint active_frame_buffer = 0;
+
+/* The video mode of each framebuffer. Used to determine if this framebuffer needs 
+ * to be refreshed from the raw_framebuffer. When the video mode is set, it's not known 
+ * which of the framebufferes will be displayed */
+enum vid_mode fb_video_mode[2] = { mode_64x64m, mode_64x64m };  
 /* 
  * Framebuffers with 16 bits per pixel as the scanline vga library uses
  * 16 bits per pixel colour.
@@ -417,13 +422,13 @@ void setup_video(void)
 /* Set active framebuffer to 0/1 for dual buf */
 void set_active_framebuffer(int frame_buffer_nr)
 {
-    PRINT_INFO("Setting Active Framebuffer to %d\n", active_frame_buffer);
+    PRINT_INFO("Setting Active Framebuffer to %d\n", frame_buffer_nr);
     active_frame_buffer = frame_buffer_nr;
 }
 
 /*
  * The following routines set a pixel into the frame_buffer at different resolutions.
- * AThe framebuffer is kept at a fixed 128x128 resolutions, and lower resolutions set
+ * The framebuffer is kept at a fixed 128x128 resolutions, and lower resolutions set
  * multiple pixels for this resolution.
  */
 void set_pixel_128(uint16_t* frame_buffer, int x, int y, int colour)
@@ -490,7 +495,7 @@ void set_pixel_32(uint16_t *frame_buffer, int x, int y, int colour)
  * frame buffer from the current raw_frame contents */
 void set_vram(int buffer_nr, int addr, uint8_t value, bool refresh)
 {
-    PRINT_TRACE("set_vram(%d,%x, %d)\n", addr, value, refresh);
+    PRINT_TRACE("set_vram(%d, %d, %x, %d)\n", buffer_nr, addr, value, refresh);
     /* raw_frame stores a copy of the Dazzler video ram. 
      * When setting ram values, copy into both the raw_frame and vga framebuffer
      * refresh is set when refreshing vga framebuffer from raw_frame. So don't need to set
@@ -608,11 +613,14 @@ void set_vram(int buffer_nr, int addr, uint8_t value, bool refresh)
 /* Used when changing video modes to copy from raw_frame into frame_buffer with the new mode */
 void refresh_vram(int buffer_nr)
 {
+
+    absolute_time_t start = get_absolute_time();
     uint8_t *raw_frame = raw_frames[buffer_nr];
     for (int i = 0 ; i < 2048 ; i++)
     {
         set_vram(buffer_nr, i, raw_frame[i], false);
     }
+    printf("vram refresh in %llu us\n", absolute_time_diff_us(start, get_absolute_time()));
 }
 
 /*************************************************************
@@ -693,12 +701,28 @@ void process_usb_commands()
                             PRINT_INFO("DAZ_CTRL ON\n");
 
                             /* Set framebuffer to 1 or 2 */
-                            set_active_framebuffer(dazzler_ctrl & 0x01);
+                            int fb = dazzler_ctrl & 0x01;
+                            set_active_framebuffer(fb);
                         }
                         else /* Dazzler turned off */
                         {
                             /* The VGA rendering routine will blank screen on next frame */
                             PRINT_INFO("DAZ_CTRL OFF\n");
+                        }
+                    }
+//                    refresh_vram(0);
+//                    refresh_vram(1);
+                    /* Make sure the video mode for this framebuffer hasn't changed
+                     * If it has, then refresh from the raw video ram */
+                    if (dazzler_ctrl & DC_ON)
+                    {
+                        refresh_vram(active_frame_buffer);
+                        int fb = dazzler_ctrl & 0x01;
+                        if (fb_video_mode[fb] != video_mode)
+                        {
+                            printf("Refreshing VRAM\n");
+                            refresh_vram(fb);
+                            fb_video_mode[fb] = video_mode;
                         }
                     }
                 }
@@ -716,6 +740,7 @@ void process_usb_commands()
                     /* If the picture control changed, set the video mode and colour palette */
                     if (prev_picture_ctrl != dazzler_picture_ctrl)
                     {
+                        PRINT_INFO("DAZ_CTRLPIC: Changing mode\n");
                         if (dazzler_picture_ctrl & DPC_RESOLUTION)  /* X4 mode */
                             if (dazzler_picture_ctrl & DPC_MEMORY)  /* 2048 byte mode*/
                                 video_mode = mode_128x128m;
@@ -740,7 +765,7 @@ void process_usb_commands()
                 int buffer_nr = (c & 0x08) ? 1 : 0;
                 int addr = (c & 0x07) * 256 + (uint8_t) usb_getbyte_blocking();
                 uint8_t value = (uint8_t) usb_getbyte_blocking();
-                PRINT_INFO("DAZ_MEMBYTE %d, %d, %x\n", buffer_nr, addr, value);
+                PRINT_INFO("DAZ_MEMBYTE %02x, %d, %d, %x\n", c, buffer_nr, addr, value);
                 set_vram(buffer_nr, addr, value, false);
                 break;
             }
