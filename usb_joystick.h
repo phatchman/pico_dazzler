@@ -47,6 +47,7 @@ typedef struct
     uint8_t prev_x;
     uint8_t prev_y;
     uint8_t prev_buttons;
+    uint8_t zero_centered;
     struct  joystick_bytes offsets;
 } usb_joystick;
 
@@ -57,5 +58,7 @@ void joy_process_hid_report(uint8_t dev_addr, uint8_t instance, uint8_t const* r
 
 /* Poll usb for input */
 void joy_schedule_hid_input(void);
+
+bool is_xbox_controller(uint16_t pid);
 
 #endif

@@ -60,7 +60,7 @@
 #define HEIGHT  128
 #define NUMCLR  16
 
-#define HID_POLL_MS   16    /* Poll the joysticks ~ 60 times per second */
+#define HID_POLL_MS   10    /* Poll HID devices for input @ 100 times per second */
 
 /* Dazzler packet types */
 #define DAZ_MEMBYTE   0x10

@@ -29,10 +29,10 @@
  * controller into an earlier port than the keyboard.
  * Proably a bug in TinyUSB?
  */
-#include "usb_joystick.h"
 #include "bsp/board.h"
 #include "tusb.h"
 #include <string.h>
+#include "usb_joystick.h"
 
 
 #define DEBUG_INFO  DEBUG_JOYSTICK
@@ -58,6 +58,39 @@ static void joy_process_input(int joynum, usb_joystick* joy);
 bool is_ps3_controller(uint16_t pid)
 {
     return (pid == 0x0268);
+}
+
+bool is_xbox_controller(uint16_t pid)
+{
+    switch(pid)
+    {
+        case 0x028E: // Microsoft 360 Wired controller
+        case 0x0719: // Microsoft Wireless Gaming Receiver
+        case 0x0291: // Third party Wireless Gaming Receiver
+        case 0xF016: // Mad Catz wired controlle
+        case 0xBEEF: // For Joytech wired controller
+        case 0x0401: // Gamestop wired controller
+        case 0x0213: // Afterglow wired controller
+        case 0x02D1: // Microsoft X-Box One pad
+        case 0x02DD: // Microsoft X-Box One pad (Firmware 2015)
+        case 0x02E3: // Microsoft X-Box One Elite pad
+        case 0x02EA: // Microsoft X-Box One S pad
+        case 0x0B0A: // Microsoft X-Box One Adaptive Controller
+        case 0x0B12: // Microsoft X-Box Core Controller
+        case 0x4A01: // Mad Catz FightStick TE 2
+        case 0x0139: // Afterglow Prismatic Wired Controller
+        case 0x0146: // Rock Candy Wired Controller for Xbox One
+        case 0x0067: // HORIPAD ONE
+        case 0x0A03: // Razer Wildcat
+        case 0x541A: // PowerA Xbox One Mini Wired Controller
+        case 0x542A: // Xbox ONE spectra
+        case 0x543A: // PowerA Xbox One wired controller
+            return true;
+        default:
+            return false;
+
+    }
+    return (pid == 0x02e3);
 }
 
 /* Callback when Invoked when device with hid interface type of "None" is mounted
@@ -98,7 +131,7 @@ void joy_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_re
                         hid_report_status = -1;
                         tuh_hid_set_report(dev_addr, instance, 0xF4, 
                                             HID_REPORT_TYPE_FEATURE, cmd_buf, sizeof(cmd_buf));
-#if 0       /* Waiting for the report result causes issues when keyboard was added and get 
+#if 0       /* Waiting for the report result causes issues when keyboard is connected. Get  
              * a Data Sequence error. Not clear why. But no real need to wait for the report result.
                         while (hid_report_status == -1)
                         {
@@ -110,6 +143,24 @@ void joy_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_re
                             printf ("ERROR configuring PS3 controller\n");
                         }
 #endif
+                    }
+                    else if (is_xbox_controller(pid))
+                    {
+                        printf("SENDING XBOX ENABLE\r\n");
+                        static uint8_t cmd_buf[] = { 0x05, 0x20, 0x00, 0x01, 0x00 };
+                        static tuh_xfer_t xfer = 
+                        {
+                            .ep_addr = 0x01,
+                            .buflen = sizeof(cmd_buf),
+                            .buffer = cmd_buf,
+                            .complete_cb = NULL,
+                            .user_data = 0
+                        };
+                        xfer.daddr = dev_addr;
+                  
+                        tuh_edpt_xfer(&xfer);
+                        joysticks[i].zero_centered = true;
+                        printf("SENT XBOX REPORT\n");
                     }
                 }
                 else
@@ -268,9 +319,17 @@ static void joy_process_input(int joynum, usb_joystick* joy)
     if (!joy->b2) daz_msg[0] |= 2;
     if (!joy->b3) daz_msg[0] |= 4;
     if (!joy->b4) daz_msg[0] |= 8;
-    daz_msg[1] = joy_get_value_x(joy->x);
-    daz_msg[2] = joy_get_value_y(joy->y);
-    
+    if (joy->zero_centered)
+    {
+        daz_msg[1] = joy->x;
+        daz_msg[2] = joy->y;
+    }
+    else
+    {
+        daz_msg[1] = joy_get_value_x(joy->x);
+        daz_msg[2] = joy_get_value_y(joy->y);
+    }
+
     PRINT_INFO("Joy = %d, X = %d, Y = %d, btn = %x, msg[0] = %02x\r\n", joynum, (int8_t) daz_msg[1], (int8_t) daz_msg[2], daz_msg[0] & 0x0F, daz_msg[0]);
     usb_send_bytes(daz_msg, 3);
 }
