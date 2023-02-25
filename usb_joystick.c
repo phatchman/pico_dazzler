@@ -118,6 +118,7 @@ void joy_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_re
 
                 joysticks[i].dev_addr = dev_addr;
                 joysticks[i].instance = instance;
+                joysticks[i].dead_zone = 8;
                 if (parse_report_descriptor(pid, desc_report, desc_len, &joysticks[i].offsets))
                 {
                     joysticks[i].connected = true;
@@ -160,6 +161,8 @@ void joy_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_re
                   
                         tuh_edpt_xfer(&xfer);
                         joysticks[i].zero_centered = true;
+                        /* My XBOX elite controller seems to have really bad centering */
+                        joysticks[i].dead_zone = 16;
                         printf("SENT XBOX REPORT\n");
                     }
                 }
@@ -293,20 +296,36 @@ void tuh_hid_set_report_complete_cb(uint8_t dev_addr, uint8_t instance, uint8_t 
 }
 
 
-static uint8_t joy_get_value_x (uint8_t value)
+static uint8_t joy_get_value_x (usb_joystick* joy)
 {
-    int16_t sval = value;
-    sval -= 127;
-    if (sval == 128) sval -= 2;
+    int16_t sval = joy->zero_centered ? (int8_t) joy->x : joy->x;
+    if (!joy->zero_centered)
+    {
+        sval -= 127;
+        // Actually need to -128 for the +ve direction
+        if (sval == 128) sval -= 1;
+    }
+    if (sval > -joy->dead_zone && sval < joy->dead_zone)
+        sval = 0;
+    /* Value of -128 reverses direction in some games */
+    if (sval == -128) sval += 1;
+
     return (uint8_t) sval;
 }
 
-static uint8_t joy_get_value_y (uint8_t value)
+static uint8_t joy_get_value_y (usb_joystick* joy)
 {
-    int16_t sval = value;
-    sval -= 127;
-    sval = -sval;
+    int16_t sval = joy->zero_centered ? (int8_t) joy->y : joy->y;
+    if (!joy->zero_centered)
+    {
+        sval -= 127;
+        sval = -sval;
+    }
+     /* Value of -128 reverses direction in some games */   
     if (sval == -128) sval += 1;
+    if (sval > -joy->dead_zone && sval < joy->dead_zone)
+        sval = 0;
+
     return (uint8_t) sval;
 }
 
@@ -319,16 +338,9 @@ static void joy_process_input(int joynum, usb_joystick* joy)
     if (!joy->b2) daz_msg[0] |= 2;
     if (!joy->b3) daz_msg[0] |= 4;
     if (!joy->b4) daz_msg[0] |= 8;
-    if (joy->zero_centered)
-    {
-        daz_msg[1] = joy->x;
-        daz_msg[2] = joy->y;
-    }
-    else
-    {
-        daz_msg[1] = joy_get_value_x(joy->x);
-        daz_msg[2] = joy_get_value_y(joy->y);
-    }
+
+    daz_msg[1] = joy_get_value_x(joy);
+    daz_msg[2] = joy_get_value_y(joy);
 
     PRINT_INFO("Joy = %d, X = %d, Y = %d, btn = %x, msg[0] = %02x\r\n", joynum, (int8_t) daz_msg[1], (int8_t) daz_msg[2], daz_msg[0] & 0x0F, daz_msg[0]);
     usb_send_bytes(daz_msg, 3);

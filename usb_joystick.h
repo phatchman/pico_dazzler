@@ -47,7 +47,8 @@ typedef struct
     uint8_t prev_x;
     uint8_t prev_y;
     uint8_t prev_buttons;
-    uint8_t zero_centered;
+    uint8_t zero_centered;              /* True if centre value of joystick is 0 e.g. XBOX controller*/
+    uint8_t dead_zone;                  /* controllers don't report 0 when "centered" can cause issues in some gsames */
     struct  joystick_bytes offsets;
 } usb_joystick;
 
