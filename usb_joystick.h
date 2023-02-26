@@ -47,10 +47,19 @@ typedef struct
     uint8_t prev_x;
     uint8_t prev_y;
     uint8_t prev_buttons;
+    uint8_t zero_centered;              /* True if centre value of joystick is 0 e.g. XBOX controller*/
+    uint8_t dead_zone;                  /* controllers don't report 0 when "centered" can cause issues in some gsames */
     struct  joystick_bytes offsets;
 } usb_joystick;
 
+/* Tiny USB Callbacks */
+void joy_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_report, uint16_t desc_len);
+void joy_hid_unmount_cb(uint8_t dev_addr, uint8_t instance);
+void joy_process_hid_report(uint8_t dev_addr, uint8_t instance, uint8_t const* report, uint16_t len);
+
 /* Poll usb for input */
-void schedule_joy_input();
+void joy_schedule_hid_input(void);
+
+bool is_xbox_controller(uint16_t pid);
 
 #endif

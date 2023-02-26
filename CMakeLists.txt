@@ -29,6 +29,8 @@ family_initialize_project(pico_dazzler_project ${CMAKE_CURRENT_LIST_DIR})
 if (NOT ${DAZ_AUDIO})
   add_executable(pico_dazzler
     main.c
+    hid_devices.c
+    usb_kbd.c
     usb_joystick.c
     parse_descriptor.c
     daz_audio.c
@@ -48,6 +50,8 @@ target_compile_definitions(pico_dazzler PUBLIC
     TRACE_DESCRIPTOR=0
     DEBUG_JOYSTICK=0
     TRACE_JOYSTICK=0
+    DEBUG_KEYBOARD=0
+    TRACE_KEYBOARD=0
   )
 
   family_configure_target(pico_dazzler)

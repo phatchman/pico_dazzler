@@ -15,8 +15,16 @@ It provides the following features:
 * Stereo line-out audio
 * A small package that fits neatly within the Altair Duino
 
-The joysticks can be "swapped" by holding all 4 buttons on one of the controllers for more than 2 seconds. This allows those with a single controller to
+The joysticks can be "swapped" between controller 1 and controller 2 by holding all 4 buttons on one of 
+the controllers for more than 2 seconds. This allows those with a single controller to
 use software like AMBUSH.COM which requires the second joystick to play.
+*Note:* For XBOX controllers you need to hold all 4 buttons for 2 seconds, then cause another input (e.g. move a stick or press another button) while holding the 4 buttons.
+
+# What's New
+1. Support for Dual Buffering, which speeds up AMBUSH and BARPLOT display.
+2. Support for XBOX controllers
+3. Support for USB keyboards
+4. Minor fixes and performance improvements
 
 # What hardware do I need?
 I chose to develop for the board described in [Hardware Design with RP2040](https://datasheets.raspberrypi.com/rp2040/hardware-design-with-rp2040.pdf), a commercial implementation of this design is made by [PIMORONI](https://shop.pimoroni.com/products/pimoroni-pico-vga-demo-base). It's widely available and relatively low cost at around USD $25 (as of early 2023).
@@ -28,10 +36,10 @@ In addition to the PIMORONI board, you will need:
 4. A USB Micro to Type A USB Cable.
 
 Optionally for Joysticks you will need:
-1. One or two USB, HID-compliant Analog Joystick / Controller / Gamepad. (Unfortunately XBOX controllers are not HID-compliant devices, but most other USB controllers are)
+1. One or two USB, HID-compliant Analog Joystick / Controller / Gamepad.
 2. A USB Type A Hub with at least 3 ports
 
-Optionally for Sound:
+Optionally for Sound:<br>
 The board provides line-out audio. I've found it drives earbud-style headphones fine. 
 If you want to hook into speakers, you'll need something that can take a line-in audio and amplify it appropriately.
 
@@ -50,7 +58,8 @@ I've never managed to get Dazzler output to work on the Due's programming port. 
 # Building from source
 Building from source is not necessary, you can use the provided pico_dazzler.uf2 file. But you may want to build from source to enable debugging features 
 or add support for other game controllers etc.
-First you must have a working Pico C/C++ build environment. Please refer to [Getting started with Raspberry Pi Pico](https://datasheets.raspberrypi.com/pico/getting-started-with-pico.pdf) or [Pico C++ development using Windows](https://learn.pimoroni.com/article/pico-development-using-wsl).
+First you must have a working Pico C/C++ build environment. Please refer to [Getting started with Raspberry Pi Pico](https://datasheets.raspberrypi.com/pico/getting-started-with-pico.pdf) or [Pico C++ development using Windows](https://learn.pimoroni.com/article/pico-development-using-wsl). There's also a new alternative for windows that doesn't need WSL, the [Raspberry Pi Pico Windows Installer](https://www.raspberrypi.com/news/raspberry-pi-pico-windows-installer/)
+
 After you have a confirmed working environment, I'd suggest loading one of the VGA examples from the pico-playground repository to confirm the VGA board is working correctly.
 
 After you build environment is set up, simply:
@@ -81,6 +90,16 @@ from the USB device port from the Due to the Pico, but I'm not sure if all Hubs 
 
 While you can power the whole system via the USB input to the Altair Duino, and I've not had any problems doing this, I'd suggest using the external
 power supply, just to be safe on power limits.
+
+# Supported Game Controllers
+
+The software has been tested with the following controllers:
+* PS3 Controller
+* XBOX One Elite
+* SNES USB Gamepad
+
+I've included support for other XBOX and Playstation controllers, but this has not been tested. I expect them to work, but you never know until you try.
+If you need assistance with getting other controllers working, you will need to connect the serial debugging output and Set DEBUG_JOYSTICK=1 and TRACE_JOYSTICK=1 in the CMakeLists.txt file. Log a bug with the debugging output attached and I'll see what can be done.
 
 # Customizing Game Controller Buttons
 Most game controllers come with more than 4 buttons, and by default the first 4 buttons listed in the HID Descriptor will be assigned as buttons 1-4.
@@ -126,13 +145,11 @@ This test represents the absolute worst-case scenario.
 | GDEMO.COM (Pico Dazzler)                   |            1:50 |
 
 As can be seen above, the bottleneck is the USB host receive rate on the Pico.<br>
-From preliminary investigations, it doesn't look like there is any software solution to this. The Pico should be more than capable of handling the data rate, and more 
-investigation is necessary. The rest of the Pico Dazzler firmware adds negligible overhead.
+There doesn't appear to be any software solution to this. The Pico should be more than capable of handling the data rate, and more investigation is necessary. The rest of the Pico Dazzler firmware adds negligible overhead.
 
 In real-world applications it is rare that this speed difference will make any difference as the application spends more time calculating than updating the video ram.
-The Kaleidoscope does run slightly slower and Barplot, which alternates between video ram addresses on each frame (requiring a full refresh of the video ram), shows a lot of flicker.
 
-Outside of that I haven't seen any practical issues. Noteably GDEMO.COM, the Dazzler Demo program, runs in exactly the same amount of time as the Windows client.
+With the latest release I've not seen any slowdowns in any of the applications I've tried. Notably GDEMO.COM, the Dazzler Demo program, runs in exactly the same amount of time as the Windows client.
 
 # Debug Output
 
@@ -145,11 +162,14 @@ Debug output should not really be necessary, but will be handy if you run into i
 Very minimal information is output by default. But you can change the debug options by editing the CMakeLists.txt file and changing the XXX_DEBUG and XXX_TRACE values to 1 for the relevant module.
 
 # Known Issues
-1. The bottom line of the VGA displays "garbage" data. This is likely a bug in the Pico's scanline video SDK, but I've not investigated yet.
+1. The top VGA scanline is not displayed and the bottom VGA scanline displays a blank line. This is likely and issue with the Pico VGA scanline implementation.
+2. Hot plugging devices does not always work, and in some cases can crash the Pico. 
+It is suggested that you have all USB devices connected when powering on the Pico Dazzler.
 
 # TODO
-1. Support XBOX controllers
+1. ~~~Support XBOX controllers~~~
 2. Change the I2S audio PIO assembly to repeat the current sample, rather than needing a new value supplied at a constant 48kHz. This could allow us to support higher sampling rates and eliminate the audio queue overflows at high frequencies.
-3. Investigate issue with bottom line of VGA displaying "random" data. This is likely due to a bug in the scanline video sdk when scaling to 1024x768.
-4. Support USB keyboard devices as some programs expect input from a Cromemeco serial board, rather than the emulated SIO ports.
-5. Implement double-buffering, which might help programs like BARPLOT, which alternates the graphics mode and vram address on each frame.
+3. Investigate issue with Pico scanline library requesting 129 scanlines instead of 128. This is causing issues with the missing top scanline (line 1) and blank bottom scanline (line 768)
+4. ~~~Support USB keyboard devices~~~
+5. ~~~Implement dual-buffering, which might help programs like BARPLOT, which alternates the graphics mode and vram address on each frame.~~~
+6. Investigate if USB serial throughput can be improved.
