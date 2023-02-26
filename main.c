@@ -186,10 +186,6 @@ const scanvideo_mode_t vga_mode_128x128 =
 /* The frame_buffer to generate VGA from (0 or 1)*/
 uint active_frame_buffer = 0;
 
-/* The video mode of each framebuffer. Used to determine if this framebuffer needs 
- * to be refreshed from the raw_framebuffer. When the video mode is set, it's not known 
- * which of the framebufferes will be displayed */
-enum vid_mode fb_video_mode[2] = { mode_64x64m, mode_64x64m };  
 /* 
  * Framebuffers with 16 bits per pixel as the scanline vga library uses
  * 16 bits per pixel colour.
@@ -530,7 +526,7 @@ void __time_critical_func(set_vram)(int buffer_nr, int addr, uint8_t value, bool
 
     /* For monochrome modes, foreground colour comes from the picture control message */
     uint8_t mono_clr = dazzler_picture_ctrl & 0x0F;
-    switch(fb_video_mode[buffer_nr])
+    switch(video_mode)
     {
         case mode_128x128m:
         {
@@ -631,6 +627,7 @@ void __time_critical_func(set_vram)(int buffer_nr, int addr, uint8_t value, bool
 /* Used when changing video modes to copy from raw_frame into frame_buffer with the new mode */
 void refresh_vram(int buffer_nr)
 {
+    PRINT_TRACE("Refresh VRAM(%d)\n", buffer_nr);
     uint8_t *raw_frame = raw_frames[buffer_nr];
     for (int i = 0 ; i < 2048 ; i++)
     {
@@ -680,10 +677,11 @@ int daz_ctrl(uint8_t c)
     return active_frame_buffer;
 }
 
-void daz_ctrlpic(uint8_t c)
+bool daz_ctrlpic(uint8_t c)
 {
     PRINT_INFO("DAZ_CTRLPIC\n");
     uint8_t prev_picture_ctrl = dazzler_picture_ctrl;
+    bool mode_changed = false;
 
     if ((c & 0x0F) == 0)
     {
@@ -705,9 +703,11 @@ void daz_ctrlpic(uint8_t c)
                     video_mode = mode_32x32c;
 
             clr_table = (dazzler_picture_ctrl & DPC_COLOUR) ? colours : greys;
+            mode_changed = true;
         }
     }
     PRINT_TRACE("Video mode set to: %d\n", video_mode);
+    return mode_changed;
 }
 
 /*
@@ -769,18 +769,15 @@ void process_usb_commands()
                 int fb = daz_ctrl(c);
                 if ((usb_peekbyte() & 0xF0) == DAZ_CTRLPIC)
                 {
-                    PRINT_INFO("CTRL + CTRLPIC pair\n");
-                    daz_ctrlpic(usb_getbyte());
-                    if (fb_video_mode[fb] != video_mode)
+                    PRINT_TRACE("CTRL + CTRLPIC pair\n");
+                    /* If video mode changed, then refresh */
+                    if (daz_ctrlpic(usb_getbyte()))
                     {
-    
-                        fb_video_mode[fb] = video_mode;
                         refresh_vram(fb);
                     }
                 }
                 else
                 {
-                    fb_video_mode[fb] = video_mode;
                     refresh_vram(fb);
                 }
                 active_frame_buffer = fb;
@@ -789,21 +786,14 @@ void process_usb_commands()
             case DAZ_CTRLPIC:
             {
                 int fb = active_frame_buffer;
-                daz_ctrlpic(c);
+                bool mode_changed = daz_ctrlpic(c);
                 if ((usb_peekbyte() & 0xF0) == DAZ_CTRL)
                 {
-                    PRINT_INFO("CTRLPIC + CTRL pair\n");
+                    PRINT_TRACE("CTRLPIC + CTRL pair\n");
                     fb = daz_ctrl(usb_getbyte());
-
-                    if (fb_video_mode[fb] != video_mode)
-                    {
-                        fb_video_mode[fb] = video_mode;
-                        refresh_vram(fb);
-                    }
                 }
-                else
+                if (mode_changed)
                 {
-                    fb_video_mode[fb] = video_mode;
                     refresh_vram(fb);
                 }
                 active_frame_buffer = fb;                
