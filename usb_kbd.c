@@ -203,7 +203,7 @@ void kbd_process_hid_report(uint8_t dev_addr, uint8_t instance, uint8_t const* r
 {
     static hid_keyboard_report_t prev_kb_report = { 0, 0, {0} }; // previous report to check key released
     hid_keyboard_report_t const *kb_report = (hid_keyboard_report_t *) report;
-
+    static bool caps_lock = false;
     for(uint8_t i=0; i<6; i++)
     {
         if (kb_report->keycode[i])
@@ -215,11 +215,17 @@ void kbd_process_hid_report(uint8_t dev_addr, uint8_t instance, uint8_t const* r
             }
             else
             {
-                int modifier = 0;   // 0 = normal, 1 = shift 2 = ctrl
                 // not existed in previous report means the current key is pressed
+                if (kb_report->keycode[i] == HID_KEY_CAPS_LOCK)
+                {
+                    caps_lock = !caps_lock;
+                }
+                int modifier = caps_lock ? 1 : 0;   // 0 = normal, 1 = shift 2 = ctrl
+
                 if (kb_report->modifier & (KEYBOARD_MODIFIER_LEFTSHIFT | KEYBOARD_MODIFIER_RIGHTSHIFT))
                 {
-                    modifier = 1;
+                    /* Unshift if caps lock, otherwise shift */
+                    modifier = caps_lock ? 0 : 1;
                 }
                 else if (kb_report->modifier & (KEYBOARD_MODIFIER_LEFTCTRL | KEYBOARD_MODIFIER_RIGHTCTRL))
                 {
@@ -233,10 +239,19 @@ void kbd_process_hid_report(uint8_t dev_addr, uint8_t instance, uint8_t const* r
 
                 fflush(stdout); // flush right away, else nanolib will wait for newline
 #endif
-                uint8_t msg[2];
-                msg[0] = DAZ_KEY;
-                msg[1] = ch;
-                usb_send_bytes(msg, 2);
+                if (ch)
+                {
+                    uint8_t msg[2];
+                    msg[0] = DAZ_KEY;
+                    msg[1] = ch;
+                    usb_send_bytes(msg, 2);
+                }
+#if DEBUG_TRACE > 0
+                else
+                {
+                    printf("keycode = %d\n", kb_report->keycode[i]);
+                }
+#endif
             }
         }
     }
