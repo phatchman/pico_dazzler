@@ -47,7 +47,7 @@ If you want to hook into speakers, you'll need something that can take a line-in
 
 # Breadboard Dazzler?
 
-If you want to try it out without buying the board, you can get all funcionality except sound by using a breadboard, 12 resistors and some wire.
+If you want to try it out without buying the board, you can get all funcionality except sound by using a breadboard, 15 resistors and some jumper wires.
 
 See the VGA section of [Hardware Design with RP2040](https://datasheets.raspberrypi.com/rp2040/hardware-design-with-rp2040.pdf) for more information.
 
