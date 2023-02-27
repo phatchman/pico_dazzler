@@ -45,6 +45,14 @@ If you want to hook into speakers, you'll need something that can take a line-in
 
 ![My test setup](https://github.com/phatchman/pico_dazzler/blob/main/img/pico_dazzler.jpg)
 
+# Breadboard Dazzler?
+
+If you want to try it out without buying the board, you can get all funcionality except sound by using a breadboard, 12 resistors and some wire.
+
+See the VGA section of [Hardware Design with RP2040](https://datasheets.raspberrypi.com/rp2040/hardware-design-with-rp2040.pdf) for more information.
+![VGA Pinout](https://github.com/phatchman/pico_dazzler/blob/main/img/pico_dazzler_vga1.png)
+![VGA DAC](https://github.com/phatchman/pico_dazzler/blob/main/img/pico_dazzler_vga2.png)
+
 # Preparing the Altair 8800 Simulator firmware
 The firmware shipped with the Altair-Duino doesn't support the Dazzler out of the box. Please follow David's instructions on his [Project Page](https://www.hackster.io/david-hansel/dazzler-display-for-altair-simulator-3febc6) and the [Altair-Duino instructions](https://adwaterandstir.com/install/) for information on how to rebuild the firmware. Take note of the "config.h" options used in building the firmware to make sure you retain your existing functionality.
 
