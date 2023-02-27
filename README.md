@@ -173,9 +173,6 @@ Very minimal information is output by default. But you can change the debug opti
 It is suggested that you have all USB devices connected when powering on the Pico Dazzler.
 
 # TODO
-1. ~~~Support XBOX controllers~~~
 2. Change the I2S audio PIO assembly to repeat the current sample, rather than needing a new value supplied at a constant 48kHz. This could allow us to support higher sampling rates and eliminate the audio queue overflows at high frequencies.
 3. Investigate issue with Pico scanline library requesting 129 scanlines instead of 128. This is causing issues with the missing top scanline (line 1) and blank bottom scanline (line 768)
-4. ~~~Support USB keyboard devices~~~
-5. ~~~Implement dual-buffering, which might help programs like BARPLOT, which alternates the graphics mode and vram address on each frame.~~~
 6. Investigate if USB serial throughput can be improved.
