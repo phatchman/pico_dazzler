@@ -105,7 +105,7 @@ The software has been tested with the following controllers:
 * SNES USB Gamepad
 
 I've included support for other XBOX and Playstation controllers, but this has not been tested. I expect them to work, but you never know until you try.
-If you need assistance with getting other controllers working, you will need to connect the serial debugging output and Set DEBUG_JOYSTICK=1 and TRACE_JOYSTICK=1 in the CMakeLists.txt file. Log a bug with the debugging output attached and I'll see what can be done.
+If you need assistance with getting other controllers working, you will need to connect the serial debugging output and build with DEBUG_JOYSTICK=1 and TRACE_JOYSTICK=1 set in the CMakeLists.txt file. Log a bug with the debugging output attached and I'll see what can be done.
 
 # Customizing Game Controller Buttons
 Most game controllers come with more than 4 buttons, and by default the first 4 buttons listed in the HID Descriptor will be assigned as buttons 1-4.
