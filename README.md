@@ -168,7 +168,7 @@ Debug output should not really be necessary, but will be handy if you run into i
 Very minimal information is output by default. But you can change the debug options by editing the CMakeLists.txt file and changing the XXX_DEBUG and XXX_TRACE values to 1 for the relevant module.
 
 # Known Issues
-1. The top VGA scanline is not displayed and the bottom VGA scanline displays a blank line. This is likely and issue with the Pico VGA scanline implementation.
+1. The top VGA scanline is not displayed and the bottom VGA scanline displays a blank line. This is likely an issue with the Pico VGA scanline implementation.
 2. Hot plugging devices does not always work, and in some cases can crash the Pico. 
 It is suggested that you have all USB devices connected when powering on the Pico Dazzler.
 
