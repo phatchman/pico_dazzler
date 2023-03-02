@@ -104,6 +104,7 @@ The software has been tested with the following controllers:
 * XBOX One Elite
 * SNES USB Gamepad
 
+Fully HID compliant controllers should work out of the box, but may not have an ideal button mapping.
 I've included support for other XBOX and Playstation controllers, but this has not been tested. I expect them to work, but you never know until you try.
 If you need assistance with getting other controllers working, you will need to connect the serial debugging output and build with DEBUG_JOYSTICK=1 and TRACE_JOYSTICK=1 set in the CMakeLists.txt file. Log a bug with the debugging output attached and I'll see what can be done.
 
