@@ -53,7 +53,7 @@ CDOS is similar enough to CPM that you should be able to find your way around. C
 2) Make sure you have a valid CDOS boot disk mounted at Disk 0
 
 ### You have a ; prompt
-You didn't configure auto-boot. Press B `<Enter`> to boot.
+You didn't configure auto-boot. Press B `<Enter>` to boot.
 
 
 
