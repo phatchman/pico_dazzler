@@ -106,7 +106,7 @@ void audio_init() {
         .channel_count = 2,
     };
 
-    /* Make sure to used an unused DMA channel and PIO state machine */
+    /* Make sure to use an unused DMA channel and PIO state machine */
     struct audio_i2s_config config = {
             .data_pin = PICO_AUDIO_I2S_DATA_PIN,
             .clock_pin_base = PICO_AUDIO_I2S_CLOCK_PIN_BASE,
@@ -117,7 +117,6 @@ void audio_init() {
     dazzler_audio_i2s_setup(&audio_format, &config);
     dazzler_update_pio_frequency(audio_format.sample_freq, config.pio_sm);
     pio_sm_set_enabled(audio_pio, config.pio_sm, true);
-
 
     queue_init(&chan0_queue, 4, AUDIO_QUEUE_LEN);
     queue_init(&chan1_queue, 4, AUDIO_QUEUE_LEN);
