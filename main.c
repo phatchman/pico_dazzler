@@ -172,8 +172,8 @@ const scanvideo_mode_t vga_mode_128x128 =
 {
     .default_timing = &vga_timing_1024x768_60_default,
     .pio_program = &video_24mhz_composable,
-    .width = 1024,
-    .height = 768,
+    .width = 128,
+    .height = 128,
     .xscale = 8,
     .yscale = 6,
 };
@@ -192,9 +192,7 @@ uint active_frame_buffer = 0;
  * First 2 framebuffers are for dual buffering. The 3rd is a blank framebuffer
  * for when the Dazzler is turned off.
  */
-uint16_t frame_buffers[3][WIDTH * (HEIGHT + 1)];    
-/* Note: Temporarilt add one extra blank line to work around bug in scnaline library, which
- * seems to be displaying hte last VGA line from off the end of the frame buffer */
+uint16_t frame_buffers[3][WIDTH * HEIGHT];
 
 /* 
  * This is a copy of the Altair's video ram. We need a copy of this because:
