@@ -32,7 +32,7 @@ Drive (0) mounted disk image  : CDISK04.DSK (Or whatever you have named the disk
 Pro(c)essor                 : Zilog Z80
 ```
 Optionally save the configuration and set the following front-panel switches in last 2 octets (sw 5 - sw 0)
-```010 001```
+`010 001`
 Toggle the AUX1 switch down.<br>
 
 The simulator should then boot into CDOS.
@@ -53,7 +53,7 @@ CDOS is similar enough to CPM that you should be able to find your way around. C
 2) Make sure you have a valid CDOS boot disk mounted at Disk 0
 
 ### You have a ; prompt
-You didn't configure auto-boot. Press B <Enter> to boot.
+You didn't configure auto-boot. Press B `<Enter`> to boot.
 
 
 
