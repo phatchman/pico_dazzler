@@ -33,7 +33,7 @@ Pro(c)essor                 : Zilog Z80
 ```
 Optionally save the configuration and set the following front-panel switches in last 2 octets (sw 5 - sw 0)
 ```010 001```
-Press AUX1 switch downward.<br>
+Toggle the AUX1 switch down.<br>
 
 The simulator should then boot into CDOS.
 ```
