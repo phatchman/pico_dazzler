@@ -47,6 +47,12 @@ A.
 ```
 CDOS is similar enough to CPM that you should be able to find your way around. CDOS and various other manuals are included in this repository for your reference.
 
+## Graphics extensions for Basic
+Run GRAPHX.COM, this will load 16K Basic with the Dazzler graphics extensions
+There are two sample programs, BOUNCE.BAS and ROTATE.BAS<br>
+These can be loaded through the basic command LOAD"ROTATE.BAS"<br>
+Always use upper-case when typing commands<br>
+
 ## Troubleshooting
 ### Hangs at [Running Cromemco RDOS 1.0 ROM]
 1) If you have the Dazzler configured, it must be connected. CDOS initializes the Dazzler at startup if present.
