@@ -1,4 +1,3 @@
-
 /*
  * MIT License
  *
@@ -48,9 +47,10 @@
 
 #define AUDIO_QUEUE_LEN     512         /* Keep a buffer of 512 samples. This seems to be enough to minimise overflows 
                                            without delaying audio too much */
-#define HWALARM_NUM         2           /* Dedicated ardware alarm to use */
+#define HWALARM_NUM         2           /* Dedicated hardware alarm to use */
 #define AUDIO_SAMPLE_RATE   48000       /* 48kHz audio */
 #define ALARM_FREQ          (1000000 / AUDIO_SAMPLE_RATE)   /* 20us for 48kHz, which is slightly fast, but works */
+#define AUDIO_SM            3           /* Audio PIO State Machine */
 #define audio_pio __CONCAT(pio, PICO_AUDIO_I2S_PIO)
 #define GPIO_FUNC_PIOx __CONCAT(GPIO_FUNC_PIO, PICO_AUDIO_I2S_PIO)
 
@@ -60,7 +60,7 @@ static uint32_t current_sample = 0;     /* The currently playing 16 bit PCM for 
 static bool have_delay[2];              /* Have we recevied a delay for how long to play this sample yet? */            
 static uint16_t next_sample[2];         /* The next PCM sample value to play */    
 static absolute_time_t next_delay[2];   /* how long to play the current (not next) PCM sample */
-
+static absolute_time_t sample_time;     /* Time current sample was sent to DAC */
 static alarm_pool_t *audio_alarm_pool;  /* Create a separate alarm pool for audio which can't be shared */
 static queue_t chan0_queue;             /* Queue of audio samples for left channel */
 static queue_t chan1_queue;             /* Queue of audio samples for right channel */
@@ -111,7 +111,7 @@ void audio_init() {
             .data_pin = PICO_AUDIO_I2S_DATA_PIN,
             .clock_pin_base = PICO_AUDIO_I2S_CLOCK_PIN_BASE,
             .dma_channel = 1,
-            .pio_sm = 3,
+            .pio_sm = AUDIO_SM,
     };
 
     dazzler_audio_i2s_setup(&audio_format, &config);
@@ -136,7 +136,7 @@ bool __time_critical_func(play_audio_sample_cb)(struct repeating_timer *t)
     absolute_time_t current_time = get_absolute_time();
 
     /* If current PCM sample has played long enough */
-    if (absolute_time_diff_us(next_delay[0], current_time) >= 0)
+    if (have_delay[0] && absolute_time_diff_us(next_delay[0], current_time) >= 0)
     {
         /* update current sample from store next sample */
         current_sample = (current_sample & 0xffff00000) | next_sample[0];
@@ -146,7 +146,7 @@ bool __time_critical_func(play_audio_sample_cb)(struct repeating_timer *t)
         {
             /* If another sample is queued, then set next_delay (which is how long to play the current sample)
              * and next_sample (which is the next sample to play) */
-            next_delay[0] = delayed_by_us(current_time, delay_and_sample >> 16);
+            next_delay[0] = delayed_by_us(next_delay[0], (delay_and_sample >> 16));
             next_sample[0] = delay_and_sample & 0x0000ffff;
             have_delay[0] = true;
         }
@@ -170,14 +170,14 @@ bool __time_critical_func(play_audio_sample_cb)(struct repeating_timer *t)
         }
     }
     /* Same logic for the right channel */
-    if (absolute_time_diff_us(next_delay[1], current_time) >= 0)
+    if (have_delay[1] && absolute_time_diff_us(next_delay[1], current_time) >= 0)
     {
         current_sample = (current_sample & 0x0000ffff) | (next_sample[1]<< 16);
 
         uint32_t delay_and_sample;
         if (queue_try_remove(&chan1_queue, &delay_and_sample))
         {
-            next_delay[1] = delayed_by_us(current_time, delay_and_sample >> 16);
+            next_delay[1] = delayed_by_us(next_delay[1], (delay_and_sample >> 16));
             next_sample[1] = delay_and_sample & 0x0000ffff;
             have_delay[1] = true;
         }
@@ -198,7 +198,7 @@ bool __time_critical_func(play_audio_sample_cb)(struct repeating_timer *t)
         }
     }
     /* Finally send the sample to the state machine */
-    pio_sm_put(audio_pio, 3, current_sample);
+    pio_sm_put(audio_pio, AUDIO_SM, current_sample);
     return true;
 }
 
@@ -234,6 +234,7 @@ int main() {
 
     stdio_init_all();
     audio_init();
+    int timeout = 2000;
 
     absolute_time_t sample_time = make_timeout_time_us(timeout);
     int samples[2] = { 0x7f, 0x81 };
