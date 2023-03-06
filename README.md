@@ -21,6 +21,13 @@ use software like AMBUSH.COM which requires the second joystick to play.
 *Note:* For XBOX controllers you need to hold all 4 buttons for 2 seconds, then cause another input (e.g. move a stick or press another button) while holding the 4 buttons.
 
 # What's New
+
+#### Version 3.0
+1. Much improved audio
+2. Resolved issue with missing 1st and last scanline
+3. Added Application disk and instructions for running CDOS
+
+#### Version 2.0
 1. Support for Dual Buffering, which speeds up AMBUSH and BARPLOT display.
 2. Support for XBOX controllers
 3. Support for USB keyboards
@@ -134,9 +141,9 @@ Before reporting an issue, please test the program on David's [Windows client](h
 
 # Performance
 
-For almost all uses, the PICO will provide native-speed performance. However, I've found 2 issues:
-1. The USB Host implementation on the Pico cannot read data at full speed. For fast updates to the video memory, the Pico may cause slowdowns. I've not found this to be noticable in any program I've tested.
-2. The SOUNDF.COM application can produce audio faster than the 48kHz sampling rate implemented. You will get some occasional pops at the highest frequencies on sin wave and oboe.
+For almost all uses, the Pico will provide native-speed performance. However, I've found 1 issue:
+1. The USB Host implementation on the Pico cannot read data at full speed. For fast updates to the video memory, the Pico may cause slowdowns. I've not found this to be noticeable in any program I've tested.
+
 
 ## Performance Testing Results
 The results below are from a test program that updates the full 2k of video ram with an alternating pattern in a tight loop, as fast as possible. 
@@ -168,11 +175,11 @@ Debug output should not really be necessary, but will be handy if you run into i
 Very minimal information is output by default. But you can change the debug options by editing the CMakeLists.txt file and changing the XXX_DEBUG and XXX_TRACE values to 1 for the relevant module.
 
 # Known Issues
-1. The top VGA scanline is not displayed and the bottom VGA scanline displays a blank line. This is likely an issue with the Pico VGA scanline implementation.
-2. Hot plugging devices does not always work, and in some cases can crash the Pico. 
+1. Hot plugging devices does not always work, and in some cases can crash the Pico. 
 It is suggested that you have all USB devices connected when powering on the Pico Dazzler.
+This is more common if a USB keyboard is connected. Connecting the keyboard to a port number higher than
+the controllers seems to minimise the issue.
+
 
 # TODO
-1. Change the I2S audio PIO assembly to repeat the current sample, rather than needing a new value supplied at a constant 48kHz. This could allow us to support higher sampling rates and eliminate the audio queue overflows at high frequencies.
-2. Investigate issue with Pico scanline library requesting 129 scanlines instead of 128. This is causing issues with the missing top scanline (line 1) and blank bottom scanline (line 768)
-3. Investigate if USB serial throughput can be improved.
+Functionally complete
