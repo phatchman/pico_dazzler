@@ -23,7 +23,7 @@ SIO board re(v)ision       : Cromemco
 *Configure the bootable disk*
 ```
 (C) Configure cromemco drive
-Disable boot ROM after (b)oot : yes (Required as this bootable disk is configured to use all 64K RAM)
+Disable boot ROM after (b)oot : yes (Required if bootable disk is configured to more than 48K RAM)
 Enable (a)uto-boot            : yes
 Drive (0) mounted disk image  : CDISK04.DSK (Or whatever you have named the disk image)
 ```
