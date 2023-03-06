@@ -867,7 +867,7 @@ int main(void)
     
     /* Start VGA rendering */
     multicore_launch_core1(core1_main);
-
+    printf("Pico Dazzler V%s\n", PICO_DAZZLER_VERSION);
     printf("READY\n");
     /* Start accepting Dazzler commands from Altair-Duino */
     process_usb_commands();

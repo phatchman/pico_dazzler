@@ -3,6 +3,7 @@ set(PICO_BOARD vgaboard)
 set(BOARD pico_sdk)
 set(FAMILY rp2040)
 set(DAZ_AUDIO false)
+set(PICO_DAZZLER_VERSION "3.0")
 
 set(PICO_SDK_PATH ${CMAKE_SOURCE_DIR}/pico-sdk)
 set(PICO_EXTRAS_PATH ${CMAKE_SOURCE_DIR}/pico-extras)
@@ -36,7 +37,8 @@ if (NOT ${DAZ_AUDIO})
     daz_audio.c
   )
   
-target_compile_definitions(pico_dazzler PUBLIC 
+target_compile_definitions(pico_dazzler PUBLIC
+    PICO_DAZZLER_VERSION=${PICO_DAZZLER_VERSION}
     PICO_SCANVIDEO_MAX_SCANLINE_BUFFER_WORDS=128
     PICO_SCANVIDEO_SCANLINE_BUFFER_COUNT=8
     USE_AUDIO_I2S=1
