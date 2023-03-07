@@ -13,7 +13,7 @@ This is a collection of working Dazzler software running under Cromemco CDOS. Wh
 
 ## Configuring the Altair Simulator
 
-To boot CDOS, you need to configure the ALtair Simulator / Altair-Duino as follows:
+To boot CDOS, you need to configure the Altair Simulator / Altair-Duino as follows:
 *Configure the serial card*
 ```
 (E) Configure serial cards
